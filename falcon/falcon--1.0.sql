@@ -245,15 +245,6 @@ CREATE SEQUENCE falcon.pg_dfs_inodeid_seq
     INCREMENT BY 32
     MAXVALUE 9223372036854775807;
 ALTER SEQUENCE falcon.pg_dfs_inodeid_seq SET SCHEMA pg_catalog;
-CREATE TABLE falcon.dfs_directory_path(
-    name text,
-    inodeid bigint NOT NULL DEFAULT nextval('pg_dfs_inodeid_seq'),
-    parentid bigint,
-    subpartnum int
-);
-CREATE UNIQUE INDEX dfs_directory_path_index 
-ON falcon.dfs_directory_path using btree(parentid, name);
-ALTER TABLE falcon.dfs_directory_path SET SCHEMA pg_catalog;
 -- end add--
 
 ----------------------------------------------------------------

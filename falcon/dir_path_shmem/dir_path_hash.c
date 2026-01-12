@@ -28,7 +28,6 @@
 #include "utils/palloc.h"
 #include "utils/snapmgr.h"
 
-#include "metadb/directory_path.h"
 #include "metadb/directory_table.h"
 #include "utils/error_log.h"
 #include "utils/rwlock.h"
