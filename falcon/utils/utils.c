@@ -42,6 +42,7 @@
 
 uint64_t GenerateInodeIdBySeqAndNodeId(uint64_t seq, int nodeId) { return (seq << 12) | (nodeId & 0xFFF); }
 
+// hash value get just by part_id, parent_id is not involved
 int32 HashShard(uint64 parentId_partId)
 {
     int64 val = (int64)(parentId_partId & PART_ID_MASK);

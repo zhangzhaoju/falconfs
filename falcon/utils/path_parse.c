@@ -337,18 +337,20 @@ FalconErrorCode PathParseTreeInsert(PathParseTree root,
 
 FalconErrorCode VerifyPathValidity(const char *path, int32_t requirement, int32_t *property)
 {
-    *property = 0;
-
-    if (!path || path[0] != '/') // path = null or path doesnt start with '/'
+    //  check path validity, path should start with '/' and not be null.
+    if (!path || path[0] != '/'){
         return PATH_IS_INVALID;
-
-    int pathLen = strlen(path);
-    if (path[pathLen - 1] == '/') // path ends with '/'
-    {
-        *property |= VERIFY_PATH_VALIDITY_PROPERTY_CAN_BE_DIRECTORY;
-    } else {
-        *property |= VERIFY_PATH_VALIDITY_PROPERTY_CAN_BE_DIRECTORY | VERIFY_PATH_VALIDITY_PROPERTY_CAN_BE_FILE;
     }
+
+    // Initialize property to VERIFY_PATH_VALIDITY_PROPERTY_CAN_BE_DIRECTORY at the beginning, avoid garbage value of stack.
+    // If path ends with '/', it can only be directory otherwise it can be both file and directory.
+    *property = VERIFY_PATH_VALIDITY_PROPERTY_CAN_BE_DIRECTORY;
+    int pathLen = strlen(path);
+    if (path[pathLen - 1] != '/') // path ends with '/'
+    {
+        *property |= VERIFY_PATH_VALIDITY_PROPERTY_CAN_BE_FILE;
+    }
+    
     if ((requirement & VERIFY_PATH_VALIDITY_REQUIREMENT_MUST_BE_DIRECTORY) &&
         !(*property & VERIFY_PATH_VALIDITY_PROPERTY_CAN_BE_DIRECTORY))
         return PATH_VERIFY_FAILED;

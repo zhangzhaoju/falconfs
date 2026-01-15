@@ -241,6 +241,7 @@ void SearchShardInfoByHashValue(int32_t hashValue, int32_t *rangePoint, int32_t 
     while (pg_atomic_read_u32(ShardTableShmemCacheInvalid)) {
         ReloadShardTableShmemCache();
     }
+    // Block shard map read only when transfer operations acquire AccessExclusiveLock
     LWLockAcquire(&ShardTableShmemControl->lock, LW_SHARED);
     int l = 0;
     int r = *ShardTableShmemCacheCount;
@@ -263,7 +264,8 @@ void SearchShardInfoByHashValue(int32_t hashValue, int32_t *rangePoint, int32_t 
 }
 void SearchShardInfoByShardValue(uint64_t shardColValue, int32_t *rangePoint, int32_t *serverId)
 {
-    // Block shard map read only when transfer operations acquire AccessExclusiveLock
+    // hash value get just by part_id, parent_id is not involved
+    // and the algorithm is consistent with HashInt8 in utils.cpp which is used in client side
     int32 hashValue = HashShard(shardColValue);
     SearchShardInfoByHashValue(hashValue, rangePoint, serverId);
 }

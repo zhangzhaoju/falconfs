@@ -353,20 +353,23 @@ void FalconMkdirSubCreateHandle(MetaProcessInfo *infoArray, int count)
 
 void FalconCreateHandle(MetaProcessInfo *infoArray, int count, bool updateExisted)
 {
+    // verify path validity for each info
     for (int i = 0; i < count; ++i) {
         MetaProcessInfo info = infoArray[i];
-        //
+        // Initialize error code and error message.
         info->errorCode = SUCCESS;
         info->errorMsg = NULL;
-
+        
         int32_t property;
-        //
         FalconErrorCode errorCode =
             VerifyPathValidity(info->path, VERIFY_PATH_VALIDITY_REQUIREMENT_MUST_BE_FILE, &property);
         CHECK_ERROR_CODE_WITH_CONTINUE(errorCode);
     }
+
+    // sort infoArray by path
     pg_qsort(infoArray, count, sizeof(MetaProcessInfo), pg_qsort_meta_process_info_by_path_cmp);
 
+    // split to different shard groups by shard id, every shard group in one hash entry.
     HASHCTL info;
     memset(&info, 0, sizeof(info));
     info.keysize = sizeof(int32_t);
@@ -379,6 +382,8 @@ void FalconCreateHandle(MetaProcessInfo *infoArray, int count, bool updateExiste
     Relation directoryRel = table_open(DirectoryRelationId(), AccessShareLock);
     for (int i = 0; i < count; ++i) {
         MetaProcessInfo info = infoArray[i];
+        // skip the info which has error, no need to handle them.
+        // error code has been set while verifying path validity.
         if (info->errorCode != SUCCESS)
             continue;
 
@@ -423,6 +428,7 @@ void FalconCreateHandle(MetaProcessInfo *infoArray, int count, bool updateExiste
     }
     table_close(directoryRel, AccessShareLock);
 
+    // handle each shard group, insert inode table entries in batch.
     HASH_SEQ_STATUS status;
     hash_seq_init(&status, batchMetaProcessInfoListPerShard);
     while ((entry = hash_seq_search(&status)) != 0) {
@@ -449,9 +455,8 @@ void FalconCreateHandle(MetaProcessInfo *infoArray, int count, bool updateExiste
                 int currentGroupHandled = BATCH_OPERATION_GROUP_SIZE;
                 int toHandleMetaProcessIndex = list_length(toHandleMetaProcessList) - 1;
                 while (currentGroupHandled > 0 && toHandleMetaProcessIndex >= 0) {
-                    // force the info writen to memory
+                    // force the info written to memory
                     *(volatile MetaProcessInfo *)(&info) = list_nth(toHandleMetaProcessList, toHandleMetaProcessIndex);
-                    // info = list_nth(toHandleMetaProcessList, toHandleMetaProcessIndex);
                     --toHandleMetaProcessIndex;
                     if (info->errorCode != SUCCESS) {
                         if (info->errorCode == FILE_EXISTS) {
