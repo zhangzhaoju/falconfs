@@ -10,7 +10,6 @@
 
 PGConnection::PGConnection(PGConnectionWorkFinishNotifyFunc func, const char *ip, const int port, const char *userName)
 {
-    m_workerFinishNotifyFunc = func;
     working = true;
     std::stringstream ss;
     ss << "hostaddr=" << ip << " port=" << port << " user=" << userName << " dbname=postgres";
@@ -37,9 +36,6 @@ void PGConnection::BackgroundWorker()
         baseWorkerTaskPtr->DoWork(conn, flatBufferBuilder, replyBuilder);
         // now no one handle the ptr, auto release WorkerTask
         baseWorkerTaskPtr = nullptr;
-
-        // notify worker finish and ready for an new work.
-        m_workerFinishNotifyFunc(this);
     }
 }
 

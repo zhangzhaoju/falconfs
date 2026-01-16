@@ -256,18 +256,18 @@ void PGConnectionPool::Destroy()
     currentManagedConn.clear();
 }
 
-bool StartPGConnectionPool()
-{
-    // postgres connection pool init for process jobs dispatched by communication Server
-    char *userName = getenv("USER");
-    return PGConnectionPool::GetInstance().Init(FalconPGPort, userName, FalconConnectionPoolSize, 20, 400);
-}
+// bool StartPGConnectionPool()
+// {
+//     // postgres connection pool init for process jobs dispatched by communication Server
+//     char *userName = getenv("USER");
+//     return PGConnectionPool::GetInstance().Init(FalconPGPort, userName, FalconConnectionPoolSize, 20, 400);
+// }
 
-void DestroyPGConnectionPool() { PGConnectionPool::GetInstance().Destroy(); }
+// void DestroyPGConnectionPool() { PGConnectionPool::GetInstance().Destroy(); }
 
-// communication server callback function used to dispatch request to PGConnectionPool
-void FalconDispatchMetaJob2PGConnectionPool(void *job)
-{
-    BaseMetaServiceJob *metaJob = static_cast<BaseMetaServiceJob *>(job);
-    PGConnectionPool::GetInstance().DispatchMetaServiceJob(metaJob);
-}
+// // communication server callback function used to dispatch request to PGConnectionPool
+// void FalconDispatchMetaJob2PGConnectionPool(void *job)
+// {
+//     BaseMetaServiceJob *metaJob = static_cast<BaseMetaServiceJob *>(job);
+//     PGConnectionPool::GetInstance().DispatchMetaServiceJob(metaJob);
+// }

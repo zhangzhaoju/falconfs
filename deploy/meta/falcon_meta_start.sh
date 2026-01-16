@@ -16,7 +16,7 @@ server_name_list=()
 server_ip_list=()
 server_port_list=()
 
-shardcount=50
+shardcount=5
 
 if [[ "$cnIp" == "$localIp" ]]; then
     cnPath="${cnPathPrefix}0"

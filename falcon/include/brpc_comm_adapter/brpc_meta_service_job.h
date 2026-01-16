@@ -64,7 +64,7 @@ class BrpcMetaServiceJob : public BaseMetaServiceJob {
     size_t GetReqDatasize() override { return m_cntl->request_attachment().size(); }
 
     // copy data to dst
-    size_t CopyOutData(void *dst, size_t dstSize) override { return m_cntl->request_attachment().cutn(dst, dstSize); }
+    size_t CopyOutData(void *dst, size_t dstSize) override { return m_cntl->request_attachment().copy_to(dst, dstSize); }
 
     // get falcon support meta service types
     FalconMetaServiceType GetFalconMetaServiceType(int index) override;

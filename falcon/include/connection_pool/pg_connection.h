@@ -23,7 +23,6 @@ class PGConnection {
   private:
     typedef std::function<void(PGConnection *conn)> PGConnectionWorkFinishNotifyFunc;
     bool working;
-    PGConnectionWorkFinishNotifyFunc m_workerFinishNotifyFunc;
     flatbuffers::FlatBufferBuilder flatBufferBuilder;
     SerializedData replyBuilder;
 
