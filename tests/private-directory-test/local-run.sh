@@ -3,18 +3,18 @@
 BIN_DIR="/home/zhangzhaoju/Learn/code/falconfs/build/tests/private-directory-test"
 TEST_PROGRAM="test_falcon" # test_falcon / test_posix
 MOUNT_DIR="/" # meta directory / falconfs mount path, end with /
-FILE_PER_THREAD=1000
+FILE_PER_THREAD=100000
 PORT=1111
 FILE_SIZE=1572864
 CLIENT_NUM=1
-THREAD_NUM_PER_CLIENT=40
+THREAD_NUM_PER_CLIENT=15
 ROUND_INDEX=(0 1 2 3)
 ROUND_NAME=("workload_init" "workload_create" "workload_stat" "workload_open" "workload_close" "workload_delete" "workload_mkdir" "workload_rmdir" "workload_open_write_close" "workload_open_write_close_nocreate" "workload_open_read_close" "workload_uninit")
 CLIENT_ID=0
 MOUNT_PER_CLIENT=1
 CLIENT_CACHE_SIZE=16384
 META_SERVER_IP="127.0.0.1" # meta cn ip
-META_SERVER_PORT="55510" #meta cn port
+META_SERVER_PORT="55510" # meta cn port
 
 echo "Thread Num" $(($THREAD_NUM_PER_CLIENT * $CLIENT_NUM))", Files per Thread" $FILE_PER_THREAD
 
