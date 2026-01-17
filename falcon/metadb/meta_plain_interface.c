@@ -26,6 +26,7 @@ Datum falcon_plain_mkdir(PG_FUNCTION_ARGS)
     MetaProcessInfoData infoData;
     MetaProcessInfo info = &infoData;
     info->path = path;
+    info->serviceType = MKDIR;
 
     FalconMkdirHandle(&info, 1);
 
@@ -39,6 +40,7 @@ Datum falcon_plain_create(PG_FUNCTION_ARGS)
     MetaProcessInfoData infoData;
     MetaProcessInfo info = &infoData;
     info->path = path;
+    info->serviceType = CREATE;
 
     FalconCreateHandle(&info, 1, false);
 
@@ -52,6 +54,7 @@ Datum falcon_plain_stat(PG_FUNCTION_ARGS)
     MetaProcessInfoData infoData;
     MetaProcessInfo info = &infoData;
     info->path = path;
+    info->serviceType = STAT;
 
     FalconStatHandle(&info, 1);
 
@@ -65,6 +68,7 @@ Datum falcon_plain_rmdir(PG_FUNCTION_ARGS)
     MetaProcessInfoData infoData;
     MetaProcessInfo info = &infoData;
     info->path = path;
+    info->serviceType = RMDIR;
 
     FalconRmdirHandle(info);
 
@@ -78,6 +82,7 @@ Datum falcon_plain_readdir(PG_FUNCTION_ARGS)
     MetaProcessInfoData infoData;
     MetaProcessInfo info = &infoData;
     info->path = path;
+    info->serviceType = READDIR;
     info->readDirMaxReadCount = -1;
     info->readDirLastShardIndex = -1;
     info->readDirLastFileName = "";

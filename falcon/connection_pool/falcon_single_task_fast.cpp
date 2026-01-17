@@ -12,92 +12,6 @@ extern "C" {
 #include "utils/utils_standalone.h"
 }
 
-std::string ExtractPathFromMetaParam(const falcon::meta_fbs::MetaParam *metaParam)
-{
-    std::string extracted_path;
-    // Deserialize to corresponding Param type based on param_type
-    switch (metaParam->param_type()) {
-    case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_PlainCommandParam: {
-        // PlainCommandParam does not contain path information, skip directly, cannot allocate connection based on path
-        auto plainCommandParam = metaParam->param_as_PlainCommandParam();
-        break;
-    }
-    case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_PathOnlyParam: {
-        auto pathParam = metaParam->param_as_PathOnlyParam();
-        extracted_path = pathParam->path()->c_str();
-        break;
-    }
-    case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_MkdirSubMkdirParam: {
-        auto mkdirSubMkdirParam = metaParam->param_as_MkdirSubMkdirParam();
-        extracted_path = mkdirSubMkdirParam->name()->c_str();
-        break;
-    }
-    case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_MkdirSubCreateParam: {
-        auto mkdirSubCreateParam = metaParam->param_as_MkdirSubCreateParam();
-        extracted_path = mkdirSubCreateParam->name()->c_str();
-        break;
-    }
-    case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_CloseParam: {
-        auto closeParam = metaParam->param_as_CloseParam();
-        extracted_path = closeParam->path()->c_str();
-        break;
-    }
-    case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_ReadDirParam: {
-        // TODO: ReadDirParam has a field last_file_name, need consider it while extract path
-        auto readDirParam = metaParam->param_as_ReadDirParam();
-        extracted_path = readDirParam->path()->c_str();
-        break;
-    }
-    case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_RmdirSubRmdirParam: {
-        auto rmdirSubRmdirParam = metaParam->param_as_RmdirSubRmdirParam();
-        extracted_path = rmdirSubRmdirParam->name()->c_str();
-        break;
-    }
-    case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_RmdirSubUnlinkParam: {
-        auto rmdirSubUnlinkParam = metaParam->param_as_RmdirSubUnlinkParam();
-        extracted_path = rmdirSubUnlinkParam->name()->c_str();
-        break;
-    }
-    case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_RenameParam: {
-        // TODO: rename using which path? src or dst?
-        auto renameParam = metaParam->param_as_RenameParam();
-        extracted_path = renameParam->src()->c_str();
-        break;
-    }
-    case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_RenameSubRenameLocallyParam: {
-        // TODO: rename using which path? src or dst?
-        auto renameSubRenameLocallyParam = metaParam->param_as_RenameSubRenameLocallyParam();
-        extracted_path = renameSubRenameLocallyParam->dst_name()->c_str();
-        break;
-    }
-    case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_RenameSubCreateParam: {
-        auto renameSubCreateParam = metaParam->param_as_RenameSubCreateParam();
-        extracted_path = renameSubCreateParam->name()->c_str(); 
-        break;
-    }
-    case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_UtimeNsParam: {
-        auto utimeNsParam = metaParam->param_as_UtimeNsParam();
-        extracted_path = utimeNsParam->path()->c_str();
-        break;
-    }
-    case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_ChownParam: {
-        auto chownParam = metaParam->param_as_ChownParam();
-        extracted_path = chownParam->path()->c_str();
-        break;
-    }
-    case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_ChmodParam: {
-        auto chmodParam = metaParam->param_as_ChmodParam();
-        extracted_path = chmodParam->path()->c_str();
-        break;
-    }
-    case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_NONE:
-    default:
-        // unknown type or NONE
-        break;
-    }
-    return extracted_path;
-}
-
 void FalconSingleTaskFast::ConstructSendCommand()
 {
     // Reset member variables
@@ -137,9 +51,6 @@ void FalconSingleTaskFast::ConstructSendCommand()
         throw std::runtime_error("request param is corrupt. 1");
     const falcon::meta_fbs::MetaParam *param = falcon::meta_fbs::GetMetaParam(buf);
 
-    // get shard key for connection selection
-    m_shard_key = ExtractPathFromMetaParam(param);
-
     if (serviceType == FalconMetaServiceType::PLAIN_COMMAND) {
         // PLAIN_COMMAND just using the origin request content.
         auto plainCommandParam = param->param_as_PlainCommandParam();
@@ -169,6 +80,8 @@ void FalconSingleTaskFast::DoWork(PGconn *conn,
     PGresult *res{nullptr};
     while ((res = PQgetResult(conn)) != NULL)
         PQclear(res);
+
+    ConstructSendCommand();
 
     // 2. Send request to PG worker process, Send command already constructed in connection pool
     int sendQuerySucceed = PQsendQuery(conn, m_toSendCommand.str().c_str());

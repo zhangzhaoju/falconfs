@@ -29,13 +29,19 @@ inline falcon::meta_fbs::AnyMetaParam ToFlatBuffersType(falcon::meta_proto::Meta
     case falcon::meta_proto::PLAIN_COMMAND:
         return falcon::meta_fbs::AnyMetaParam_PlainCommandParam;
     case falcon::meta_proto::MKDIR:
+        return falcon::meta_fbs::AnyMetaParam_MkdirParam;
     case falcon::meta_proto::CREATE:
+        return falcon::meta_fbs::AnyMetaParam_CreateParam;
     case falcon::meta_proto::STAT:
+        return falcon::meta_fbs::AnyMetaParam_StatParam;
     case falcon::meta_proto::OPEN:
+        return falcon::meta_fbs::AnyMetaParam_OpenParam;
     case falcon::meta_proto::UNLINK:
+        return falcon::meta_fbs::AnyMetaParam_UnlinkParam;
     case falcon::meta_proto::OPENDIR:
+        return falcon::meta_fbs::AnyMetaParam_OpendirParam;
     case falcon::meta_proto::RMDIR:
-        return falcon::meta_fbs::AnyMetaParam_PathOnlyParam;
+        return falcon::meta_fbs::AnyMetaParam_RmdirParam;
     case falcon::meta_proto::CLOSE:
         return falcon::meta_fbs::AnyMetaParam_CloseParam;
     case falcon::meta_proto::READDIR:
@@ -177,7 +183,7 @@ FalconErrorCode Connection::PlainCommand(const char *command, PlainCommandResult
 FalconErrorCode Connection::Mkdir(const char *path, ConnectionCache *cache)
 {
     auto paramBuilder = [path](flatbuffers::FlatBufferBuilder &builder) {
-        return falcon::meta_fbs::CreatePathOnlyParamDirect(builder, path);
+        return falcon::meta_fbs::CreateMkdirParamDirect(builder, path);
     };
 
     auto responseHandler = [](const falcon::meta_fbs::MetaResponse *metaResponse, void *) {
@@ -192,7 +198,7 @@ FalconErrorCode
 Connection::Create(const char *path, uint64_t &inodeId, int32_t &nodeId, struct stat *stbuf, ConnectionCache *cache)
 {
     auto paramBuilder = [path](flatbuffers::FlatBufferBuilder &builder) {
-        return falcon::meta_fbs::CreatePathOnlyParamDirect(builder, path);
+        return falcon::meta_fbs::CreateCreateParamDirect(builder, path);
     };
 
     auto responseHandler = [&inodeId, &nodeId, stbuf](const falcon::meta_fbs::MetaResponse *metaResponse, void *) {
@@ -229,7 +235,7 @@ Connection::Create(const char *path, uint64_t &inodeId, int32_t &nodeId, struct 
 FalconErrorCode Connection::Stat(const char *path, struct stat *stbuf, ConnectionCache *cache)
 {
     auto paramBuilder = [path](flatbuffers::FlatBufferBuilder &builder) {
-        return falcon::meta_fbs::CreatePathOnlyParamDirect(builder, path);
+        return falcon::meta_fbs::CreateStatParamDirect(builder, path);
     };
 
     auto responseHandler = [stbuf](const falcon::meta_fbs::MetaResponse *metaResponse, void *) {
@@ -267,7 +273,7 @@ FalconErrorCode Connection::Open(const char *path,
                                  ConnectionCache *cache)
 {
     auto paramBuilder = [path](flatbuffers::FlatBufferBuilder &builder) {
-        return falcon::meta_fbs::CreatePathOnlyParamDirect(builder, path);
+        return falcon::meta_fbs::CreateOpenParamDirect(builder, path);
     };
 
     auto responseHandler = [&inodeId, &size, &nodeId, stbuf](const falcon::meta_fbs::MetaResponse *metaResponse,
@@ -323,7 +329,7 @@ FalconErrorCode
 Connection::Unlink(const char *path, uint64_t &inodeId, int64_t &size, int32_t &nodeId, ConnectionCache *cache)
 {
     auto paramBuilder = [path](flatbuffers::FlatBufferBuilder &builder) {
-        return falcon::meta_fbs::CreatePathOnlyParamDirect(builder, path);
+        return falcon::meta_fbs::CreateUnlinkParamDirect(builder, path);
     };
 
     auto responseHandler = [&inodeId, &size, &nodeId](const falcon::meta_fbs::MetaResponse *metaResponse, void *) {
@@ -367,7 +373,7 @@ FalconErrorCode Connection::ReadDir(const char *path,
 FalconErrorCode Connection::OpenDir(const char *path, uint64_t &inodeId, ConnectionCache *cache)
 {
     auto paramBuilder = [path](flatbuffers::FlatBufferBuilder &builder) {
-        return falcon::meta_fbs::CreatePathOnlyParamDirect(builder, path);
+        return falcon::meta_fbs::CreateOpendirParamDirect(builder, path);
     };
 
     auto responseHandler = [&inodeId](const falcon::meta_fbs::MetaResponse *metaResponse, void *) {
@@ -385,7 +391,7 @@ FalconErrorCode Connection::OpenDir(const char *path, uint64_t &inodeId, Connect
 FalconErrorCode Connection::Rmdir(const char *path, ConnectionCache *cache)
 {
     auto paramBuilder = [path](flatbuffers::FlatBufferBuilder &builder) {
-        return falcon::meta_fbs::CreatePathOnlyParamDirect(builder, path);
+        return falcon::meta_fbs::CreateRmdirParamDirect(builder, path);
     };
 
     auto responseHandler = [](const falcon::meta_fbs::MetaResponse *metaResponse, void *) {

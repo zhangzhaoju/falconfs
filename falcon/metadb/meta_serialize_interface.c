@@ -16,13 +16,8 @@
 PG_FUNCTION_INFO_V1(falcon_meta_call_by_serialized_shmem_internal);
 PG_FUNCTION_INFO_V1(falcon_meta_call_by_serialized_data);
 
-static SerializedData MetaProcess(FalconMetaServiceType metaService, int count, char *paramBuffer)
+static SerializedData MetaProcess(int count, char *paramBuffer)
 {
-    if (count != 1 && !(metaService == MKDIR || metaService == MKDIR_SUB_MKDIR || metaService == MKDIR_SUB_CREATE ||
-                        metaService == CREATE || metaService == STAT || metaService == OPEN || metaService == CLOSE ||
-                        metaService == UNLINK))
-        FALCON_ELOG_ERROR_EXTENDED(ARGUMENT_ERROR, "metaService %d doesn't support batch operation.", metaService);
-
     SerializedData param;
 
     if (!SerializedDataInit(&param, paramBuffer, SD_SIZE_T_MAX, SD_SIZE_T_MAX, NULL))
@@ -31,76 +26,78 @@ static SerializedData MetaProcess(FalconMetaServiceType metaService, int count, 
     void *data = palloc((sizeof(MetaProcessInfoData) + sizeof(MetaProcessInfoData *)) * count);
     MetaProcessInfoData *infoDataArray = data;
     MetaProcessInfo *infoArray = (MetaProcessInfo *)(infoDataArray + count);
-    if (!SerializedDataMetaParamDecode(metaService, count, &param, infoDataArray))
+    if (!SerializedDataMetaParamDecode(count, &param, infoDataArray))
         FALCON_ELOG_ERROR(ARGUMENT_ERROR, "serialized param is corrupt.");
     for (int i = 0; i < count; i++)
         infoArray[i] = infoDataArray + i;
 
-    switch (metaService) {
-    case MKDIR:
-        FalconMkdirHandle(infoArray, count);
-        break;
-    case MKDIR_SUB_MKDIR:
-        FalconMkdirSubMkdirHandle(infoArray, count);
-        break;
-    case MKDIR_SUB_CREATE:
-        FalconMkdirSubCreateHandle(infoArray, count);
-        break;
-    case CREATE:
-        FalconCreateHandle(infoArray, count, false);
-        break;
-    case STAT:
-        FalconStatHandle(infoArray, count);
-        break;
-    case OPEN:
-        FalconOpenHandle(infoArray, count);
-        break;
-    case CLOSE:
-        FalconCloseHandle(infoArray, count);
-        break;
-    case UNLINK:
-        FalconUnlinkHandle(infoArray, count);
-        break;
-    case READDIR:
-        FalconReadDirHandle(infoArray[0]);
-        break;
-    case OPENDIR:
-        FalconOpenDirHandle(infoArray[0]);
-        break;
-    case RMDIR:
-        FalconRmdirHandle(infoArray[0]);
-        break;
-    case RMDIR_SUB_RMDIR:
-        FalconRmdirSubRmdirHandle(infoArray[0]);
-        break;
-    case RMDIR_SUB_UNLINK:
-        FalconRmdirSubUnlinkHandle(infoArray[0]);
-        break;
-    case RENAME:
-        FalconRenameHandle(infoArray[0]);
-        break;
-    case RENAME_SUB_RENAME_LOCALLY:
-        FalconRenameSubRenameLocallyHandle(infoArray[0]);
-        break;
-    case RENAME_SUB_CREATE:
-        FalconRenameSubCreateHandle(infoArray[0]);
-        break;
-    case UTIMENS:
-        FalconUtimeNsHandle(infoArray[0]);
-        break;
-    case CHOWN:
-        FalconChownHandle(infoArray[0]);
-        break;
-    case CHMOD:
-        FalconChmodHandle(infoArray[0]);
-        break;
-    default:
-        FALCON_ELOG_ERROR_EXTENDED(ARGUMENT_ERROR, "unexpected metaService: %d", metaService);
+    for (int i = 0; i < count; i++) {
+        switch (infoArray[i]->serviceType) {
+        case MKDIR:
+            FalconMkdirHandle(&infoArray[i], 1);
+            break;
+        case MKDIR_SUB_MKDIR:
+            FalconMkdirSubMkdirHandle(&infoArray[i], 1);
+            break;
+        case MKDIR_SUB_CREATE:
+            FalconMkdirSubCreateHandle(&infoArray[i], 1);
+            break;
+        case CREATE:
+            FalconCreateHandle(&infoArray[i], 1, false);
+            break;
+        case STAT:
+            FalconStatHandle(&infoArray[i], 1);
+            break;
+        case OPEN:
+            FalconOpenHandle(&infoArray[i], 1);
+            break;
+        case CLOSE:
+            FalconCloseHandle(&infoArray[i], 1);
+            break;
+        case UNLINK:
+            FalconUnlinkHandle(&infoArray[i], 1);
+            break;
+        case READDIR:
+            FalconReadDirHandle(infoArray[i]);
+            break;
+        case OPENDIR:
+            FalconOpenDirHandle(infoArray[i]);
+            break;
+        case RMDIR:
+            FalconRmdirHandle(infoArray[i]);
+            break;
+        case RMDIR_SUB_RMDIR:
+            FalconRmdirSubRmdirHandle(infoArray[i]);
+            break;
+        case RMDIR_SUB_UNLINK:
+            FalconRmdirSubUnlinkHandle(infoArray[i]);
+            break;
+        case RENAME:
+            FalconRenameHandle(infoArray[i]);
+            break;
+        case RENAME_SUB_RENAME_LOCALLY:
+            FalconRenameSubRenameLocallyHandle(infoArray[i]);
+            break;
+        case RENAME_SUB_CREATE:
+            FalconRenameSubCreateHandle(infoArray[i]);
+            break;
+        case UTIMENS:
+            FalconUtimeNsHandle(infoArray[i]);
+            break;
+        case CHOWN:
+            FalconChownHandle(infoArray[i]);
+            break;
+        case CHMOD:
+            FalconChmodHandle(infoArray[i]);
+            break;
+        default:
+            FALCON_ELOG_ERROR_EXTENDED(ARGUMENT_ERROR, "unexpected serviceType: %d", infoArray[i]->serviceType);
+        }
     }
 
     SerializedData response;
     SerializedDataInit(&response, NULL, 0, 0, &PgMemoryManager);
-    if (!SerializedDataMetaResponseEncodeWithPerProcessFlatBufferBuilder(metaService, count, infoDataArray, &response))
+    if (!SerializedDataMetaResponseEncodeWithPerProcessFlatBufferBuilder(count, infoDataArray, &response))
         FALCON_ELOG_ERROR(ARGUMENT_ERROR, "failed when serializing response.");
 
     return response;
@@ -120,7 +117,7 @@ Datum falcon_meta_call_by_serialized_shmem_internal(PG_FUNCTION_ARGS)
         FALCON_ELOG_ERROR(ARGUMENT_ERROR, "paramShmemShift is invalid.");
     char *paramBuffer = FALCON_SHMEM_ALLOCATOR_GET_POINTER(allocator, paramShmemShift);
 
-    SerializedData response = MetaProcess(metaService, count, paramBuffer);
+    SerializedData response = MetaProcess(count, paramBuffer);
 
     uint64_t responseShmemShift = FalconShmemAllocatorMalloc(allocator, response.size);
     if (responseShmemShift == 0)
@@ -141,7 +138,7 @@ Datum falcon_meta_call_by_serialized_data(PG_FUNCTION_ARGS)
     FalconMetaServiceType metaService = (FalconMetaServiceType)type;
     char *paramBuffer = VARDATA_ANY(param);
 
-    SerializedData response = MetaProcess(metaService, count, paramBuffer);
+    SerializedData response = MetaProcess(count, paramBuffer);
 
     bytea *reply = (bytea *)palloc(VARHDRSZ + response.size);
     memcpy(VARDATA_4B(reply), response.buffer, response.size);

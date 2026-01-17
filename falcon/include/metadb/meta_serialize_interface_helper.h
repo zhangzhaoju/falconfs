@@ -14,8 +14,7 @@
 extern "C" {
 #endif
 
-bool SerializedDataMetaParamDecode(FalconMetaServiceType metaService,
-                                   int count,
+bool SerializedDataMetaParamDecode(int count,
                                    SerializedData *param,
                                    MetaProcessInfoData *infoArray);
 
@@ -30,8 +29,7 @@ bool SerializedDataMetaResponseDecode(FalconMetaServiceType metaService,
                                       SerializedData *response,
                                       MetaProcessInfoData *infoArray);
 
-bool SerializedDataMetaResponseEncodeWithPerProcessFlatBufferBuilder(FalconMetaServiceType metaService,
-                                                                     int count,
+bool SerializedDataMetaResponseEncodeWithPerProcessFlatBufferBuilder(int count,
                                                                      MetaProcessInfoData *infoArray,
                                                                      SerializedData *response);
 

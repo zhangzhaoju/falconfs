@@ -23,13 +23,9 @@ class FalconSingleTaskFast : public BaseWorkerTask {
     // implement logic of SingleWorker process
     void DoWork(PGconn *conn, flatbuffers::FlatBufferBuilder &flatBufferBuilder, SerializedData &replyBuilder) override;
 
+  private:
     // construct send command to PG worker process
     void ConstructSendCommand();
-
-    // get shard key for connection selection
-    std::string GetShardKey() const { return m_shard_key; }
-
-  private:
 
     BaseMetaServiceJob *m_job{nullptr};
     // command to send to PG worker process
@@ -40,8 +36,6 @@ class FalconSingleTaskFast : public BaseWorkerTask {
     int64_t m_signature;
     // shared memory address shift for request param
     uint64_t m_sharedParamDataAddrShift;
-    // shard key extracted from request param
-    std::string m_shard_key;
 };
 
 #endif // FALCON_SINGLE_TASK_FAST_H
