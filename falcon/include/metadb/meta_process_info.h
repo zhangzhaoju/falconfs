@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "utils/error_code.h"
+#include "utils/falcon_meta_service_def.h"
 
 typedef struct OneReadDirResult
 {
@@ -20,6 +21,7 @@ typedef struct MetaProcessInfoData
     const char *path;
     uint64_t parentId;
     const char *plainCommand;
+    FalconMetaServiceType serviceType;
     int32_t readDirMaxReadCount;
 
     // inode info (input/output)

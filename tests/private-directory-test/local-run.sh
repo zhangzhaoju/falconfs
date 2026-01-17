@@ -3,7 +3,7 @@
 BIN_DIR="/home/zhangzhaoju/Learn/code/falconfs/build/tests/private-directory-test"
 TEST_PROGRAM="test_falcon" # test_falcon / test_posix
 MOUNT_DIR="/" # meta directory / falconfs mount path, end with /
-FILE_PER_THREAD=100000
+FILE_PER_THREAD=1000
 PORT=1111
 FILE_SIZE=1572864
 CLIENT_NUM=1

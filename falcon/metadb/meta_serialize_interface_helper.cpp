@@ -11,8 +11,7 @@ extern "C" {
 
 static flatbuffers::FlatBufferBuilder FlatBufferBuilderPerProcess;
 
-bool SerializedDataMetaParamDecode(FalconMetaServiceType metaService,
-                                   int count,
+bool SerializedDataMetaParamDecode(int count,
                                    SerializedData *param,
                                    MetaProcessInfoData *infoArray)
 {
@@ -35,38 +34,52 @@ bool SerializedDataMetaParamDecode(FalconMetaServiceType metaService,
         auto metaParam = falcon::meta_fbs::GetMetaParam(itemBuffer);
 
         MetaProcessInfo info = infoArray + i;
-        switch (metaService) {
-        case FalconMetaServiceType::MKDIR:
-        case FalconMetaServiceType::CREATE:
-        case FalconMetaServiceType::STAT:
-        case FalconMetaServiceType::OPEN:
-        case FalconMetaServiceType::UNLINK:
-        case FalconMetaServiceType::OPENDIR:
-        case FalconMetaServiceType::RMDIR: {
-            // path only param
-            if (metaParam->param_type() != falcon::meta_fbs::AnyMetaParam::AnyMetaParam_PathOnlyParam) {
-                printf("[debug] serialized param is corrupt: %s:%d\n", __FILE__, __LINE__);
-                return false;
-            }
-            info->path = metaParam->param_as_PathOnlyParam()->path()->c_str();
+        switch (metaParam->param_type()) {
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_MkdirParam: {
+            info->serviceType = FalconMetaServiceType::MKDIR;
+            info->path = metaParam->param_as_MkdirParam()->path()->c_str();
             break;
         }
-        case FalconMetaServiceType::MKDIR_SUB_MKDIR: {
-            if (metaParam->param_type() != falcon::meta_fbs::AnyMetaParam::AnyMetaParam_MkdirSubMkdirParam) {
-                printf("[debug] serialized param is corrupt: %s:%d\n", __FILE__, __LINE__);
-                return false;
-            }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_CreateParam: {
+            info->serviceType = FalconMetaServiceType::CREATE;
+            info->path = metaParam->param_as_CreateParam()->path()->c_str();
+            break;
+        }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_StatParam: {
+            info->serviceType = FalconMetaServiceType::STAT;
+            info->path = metaParam->param_as_StatParam()->path()->c_str();
+            break;
+        }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_OpenParam: {
+            info->serviceType = FalconMetaServiceType::OPEN;
+            info->path = metaParam->param_as_OpenParam()->path()->c_str();
+            break;
+        }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_UnlinkParam: {
+            info->serviceType = FalconMetaServiceType::UNLINK;
+            info->path = metaParam->param_as_UnlinkParam()->path()->c_str();
+            break;
+        }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_OpendirParam: {
+            info->serviceType = FalconMetaServiceType::OPENDIR;
+            info->path = metaParam->param_as_OpendirParam()->path()->c_str();
+            break;
+        }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_RmdirParam: {
+            info->serviceType = FalconMetaServiceType::RMDIR;
+            info->path = metaParam->param_as_RmdirParam()->path()->c_str();
+            break;
+        }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_MkdirSubMkdirParam: {
+            info->serviceType = FalconMetaServiceType::MKDIR_SUB_MKDIR;
             auto mkdirSubMkdirParam = metaParam->param_as_MkdirSubMkdirParam();
             info->parentId = mkdirSubMkdirParam->parent_id();
             info->name = const_cast<char *>(mkdirSubMkdirParam->name()->c_str());
             info->inodeId = mkdirSubMkdirParam->inode_id();
             break;
         }
-        case FalconMetaServiceType::MKDIR_SUB_CREATE: {
-            if (metaParam->param_type() != falcon::meta_fbs::AnyMetaParam::AnyMetaParam_MkdirSubCreateParam) {
-                printf("[debug] serialized param is corrupt: %s:%d\n", __FILE__, __LINE__);
-                return false;
-            }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_MkdirSubCreateParam: {
+            info->serviceType = FalconMetaServiceType::MKDIR_SUB_CREATE;
             auto mkdirSubCreateParam = metaParam->param_as_MkdirSubCreateParam();
             info->parentId_partId = mkdirSubCreateParam->parent_id_part_id();
             info->name = const_cast<char *>(mkdirSubCreateParam->name()->c_str());
@@ -76,11 +89,8 @@ bool SerializedDataMetaParamDecode(FalconMetaServiceType metaService,
             info->st_mtim = mkdirSubCreateParam->st_mtim();
             break;
         }
-        case FalconMetaServiceType::CLOSE: {
-            if (metaParam->param_type() != falcon::meta_fbs::AnyMetaParam::AnyMetaParam_CloseParam) {
-                printf("[debug] serialized param is corrupt: %s:%d\n", __FILE__, __LINE__);
-                return false;
-            }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_CloseParam: {
+            info->serviceType = FalconMetaServiceType::CLOSE;
             auto closeParam = metaParam->param_as_CloseParam();
             info->path = closeParam->path()->c_str();
             info->st_size = closeParam->st_size();
@@ -88,11 +98,8 @@ bool SerializedDataMetaParamDecode(FalconMetaServiceType metaService,
             info->node_id = closeParam->node_id();
             break;
         }
-        case FalconMetaServiceType::READDIR: {
-            if (metaParam->param_type() != falcon::meta_fbs::AnyMetaParam::AnyMetaParam_ReadDirParam) {
-                printf("[debug] serialized param is corrupt: %s:%d\n", __FILE__, __LINE__);
-                return false;
-            }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_ReadDirParam: {
+            info->serviceType = FalconMetaServiceType::READDIR;
             auto readDirParam = metaParam->param_as_ReadDirParam();
             info->path = readDirParam->path()->c_str();
             info->readDirMaxReadCount = readDirParam->max_read_count();
@@ -100,41 +107,29 @@ bool SerializedDataMetaParamDecode(FalconMetaServiceType metaService,
             info->readDirLastFileName = readDirParam->last_file_name()->c_str();
             break;
         }
-        case FalconMetaServiceType::RMDIR_SUB_RMDIR: {
-            if (metaParam->param_type() != falcon::meta_fbs::AnyMetaParam::AnyMetaParam_RmdirSubRmdirParam) {
-                printf("[debug] serialized param is corrupt: %s:%d\n", __FILE__, __LINE__);
-                return false;
-            }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_RmdirSubRmdirParam: {
+            info->serviceType = FalconMetaServiceType::RMDIR_SUB_RMDIR;
             auto rmdirSubRmdirParam = metaParam->param_as_RmdirSubRmdirParam();
             info->parentId = rmdirSubRmdirParam->parent_id();
             info->name = const_cast<char *>(rmdirSubRmdirParam->name()->c_str());
             break;
         }
-        case FalconMetaServiceType::RMDIR_SUB_UNLINK: {
-            if (metaParam->param_type() != falcon::meta_fbs::AnyMetaParam::AnyMetaParam_RmdirSubUnlinkParam) {
-                printf("[debug] serialized param is corrupt: %s:%d\n", __FILE__, __LINE__);
-                return false;
-            }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_RmdirSubUnlinkParam: {
+            info->serviceType = FalconMetaServiceType::RMDIR_SUB_UNLINK;
             auto rmdirSubUnlinkParam = metaParam->param_as_RmdirSubUnlinkParam();
             info->parentId_partId = rmdirSubUnlinkParam->parent_id_part_id();
             info->name = const_cast<char *>(rmdirSubUnlinkParam->name()->c_str());
             break;
         }
-        case FalconMetaServiceType::RENAME: {
-            if (metaParam->param_type() != falcon::meta_fbs::AnyMetaParam::AnyMetaParam_RenameParam) {
-                printf("[debug] serialized param is corrupt: %s:%d\n", __FILE__, __LINE__);
-                return false;
-            }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_RenameParam: {
+            info->serviceType = FalconMetaServiceType::RENAME;
             auto renameParam = metaParam->param_as_RenameParam();
             info->path = renameParam->src()->c_str();
             info->dstPath = renameParam->dst()->c_str();
             break;
         }
-        case FalconMetaServiceType::RENAME_SUB_RENAME_LOCALLY: {
-            if (metaParam->param_type() != falcon::meta_fbs::AnyMetaParam::AnyMetaParam_RenameSubRenameLocallyParam) {
-                printf("[debug] serialized param is corrupt: %s:%d\n", __FILE__, __LINE__);
-                return false;
-            }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_RenameSubRenameLocallyParam: {
+            info->serviceType = FalconMetaServiceType::RENAME_SUB_RENAME_LOCALLY;
             auto renameSubRenameLocallyParam = metaParam->param_as_RenameSubRenameLocallyParam();
             info->parentId = renameSubRenameLocallyParam->src_parent_id();
             info->parentId_partId = renameSubRenameLocallyParam->src_parent_id_part_id();
@@ -148,11 +143,8 @@ bool SerializedDataMetaParamDecode(FalconMetaServiceType metaService,
             info->inodeId = renameSubRenameLocallyParam->directory_inode_id();
             break;
         }
-        case FalconMetaServiceType::RENAME_SUB_CREATE: {
-            if (metaParam->param_type() != falcon::meta_fbs::AnyMetaParam::AnyMetaParam_RenameSubCreateParam) {
-                printf("[debug] serialized param is corrupt: %s:%d\n", __FILE__, __LINE__);
-                return false;
-            }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_RenameSubCreateParam: {
+            info->serviceType = FalconMetaServiceType::RENAME_SUB_CREATE;
             auto renameSubCreateParam = metaParam->param_as_RenameSubCreateParam();
             info->parentId_partId = renameSubCreateParam->parentid_partid();
             info->name = const_cast<char *>(renameSubCreateParam->name()->c_str());
@@ -172,39 +164,31 @@ bool SerializedDataMetaParamDecode(FalconMetaServiceType metaService,
             info->node_id = renameSubCreateParam->node_id();
             break;
         }
-        case FalconMetaServiceType::UTIMENS: {
-            if (metaParam->param_type() != falcon::meta_fbs::AnyMetaParam::AnyMetaParam_UtimeNsParam) {
-                printf("[debug] serialized param is corrupt: %s:%d\n", __FILE__, __LINE__);
-                return false;
-            }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_UtimeNsParam: {
+            info->serviceType = FalconMetaServiceType::UTIMENS;
             auto utimeNsParam = metaParam->param_as_UtimeNsParam();
             info->path = utimeNsParam->path()->c_str();
             info->st_atim = utimeNsParam->st_atim();
             info->st_mtim = utimeNsParam->st_mtim();
             break;
         }
-        case FalconMetaServiceType::CHOWN: {
-            if (metaParam->param_type() != falcon::meta_fbs::AnyMetaParam::AnyMetaParam_ChownParam) {
-                printf("[debug] serialized param is corrupt: %s:%d\n", __FILE__, __LINE__);
-                return false;
-            }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_ChownParam: {
+            info->serviceType = FalconMetaServiceType::CHOWN;
             auto chownParam = metaParam->param_as_ChownParam();
             info->path = chownParam->path()->c_str();
             info->st_uid = chownParam->st_uid();
             info->st_gid = chownParam->st_gid();
             break;
         }
-        case FalconMetaServiceType::CHMOD: {
-            if (metaParam->param_type() != falcon::meta_fbs::AnyMetaParam::AnyMetaParam_ChmodParam) {
-                printf("[debug] serialized param is corrupt: %s:%d\n", __FILE__, __LINE__);
-                return false;
-            }
+        case falcon::meta_fbs::AnyMetaParam::AnyMetaParam_ChmodParam: {
+            info->serviceType = FalconMetaServiceType::CHMOD;
             auto chmodParam = metaParam->param_as_ChmodParam();
             info->path = chmodParam->path()->c_str();
             info->st_mode = chmodParam->st_mode();
             break;
         }
         default:
+            info->serviceType = FalconMetaServiceType::NOT_SUPPORTED;
             printf("[debug] serialized param is corrupt: %s:%d\n", __FILE__, __LINE__);
             return false;
         }
@@ -388,8 +372,7 @@ bool SerializedDataMetaResponseDecode(FalconMetaServiceType metaService,
     return true;
 }
 
-static bool SerializedDataMetaResponseEncode(FalconMetaServiceType metaService,
-                                             int count,
+static bool SerializedDataMetaResponseEncode(int count,
                                              MetaProcessInfoData *infoArray,
                                              flatbuffers::FlatBufferBuilder &builder,
                                              SerializedData *response)
@@ -402,7 +385,7 @@ static bool SerializedDataMetaResponseEncode(FalconMetaServiceType metaService,
             //
             metaResponse = falcon::meta_fbs::CreateMetaResponse(builder, info->errorCode);
         } else {
-            switch (metaService) {
+            switch (info->serviceType) {
             case FalconMetaServiceType::MKDIR:
             case FalconMetaServiceType::MKDIR_SUB_MKDIR:
             case FalconMetaServiceType::MKDIR_SUB_CREATE:
@@ -559,10 +542,9 @@ static bool SerializedDataMetaResponseEncode(FalconMetaServiceType metaService,
     return true;
 }
 
-bool SerializedDataMetaResponseEncodeWithPerProcessFlatBufferBuilder(FalconMetaServiceType metaService,
-                                                                     int count,
+bool SerializedDataMetaResponseEncodeWithPerProcessFlatBufferBuilder(int count,
                                                                      MetaProcessInfoData *infoArray,
                                                                      SerializedData *response)
 {
-    return SerializedDataMetaResponseEncode(metaService, count, infoArray, FlatBufferBuilderPerProcess, response);
+    return SerializedDataMetaResponseEncode(count, infoArray, FlatBufferBuilderPerProcess, response);
 }

@@ -3,7 +3,25 @@ namespace falcon.meta_fbs;
 table PlainCommandParam {
     command: string;
 }
-table PathOnlyParam {
+table MkdirParam {
+    path: string;
+}
+table CreateParam {
+    path: string;
+}
+table StatParam {
+    path: string;
+}
+table OpenParam {
+    path: string;
+}
+table UnlinkParam {
+    path: string;
+}
+table OpendirParam {
+    path: string;
+}
+table RmdirParam {
     path: string;
 }
 table MkdirSubMkdirParam {
@@ -89,7 +107,13 @@ table ChmodParam {
 }
 union AnyMetaParam {
     PlainCommandParam,
-    PathOnlyParam,
+    MkdirParam,
+    CreateParam,
+    StatParam,
+    OpenParam,
+    UnlinkParam,
+    OpendirParam,
+    RmdirParam,
     MkdirSubMkdirParam,
     MkdirSubCreateParam,
     CloseParam,

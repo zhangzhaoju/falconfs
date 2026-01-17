@@ -47,87 +47,10 @@ class PGConnectionPoolFast {
   private:
     // define private construct function to avoid create single instance
     PGConnectionPoolFast() = default;
-
-    // Init shard range Info, get range point and server id list from shard table
-    void InitShardRangeInfo();
-
-    // map shard id to connection, used to dispatch job to specified shard connection
-    std::map<int, PGConnection *> m_connShardMap;
-
-    // shard info get from shard table
-    std::vector<FalconShardRangeInfo> m_shardRangeInfoList;
-
+    // vector of connections, used to dispatch job to specified connection
+    std::vector<PGConnection *> m_connVec;
     bool working{false};
 };
-
-void PGConnectionPoolFast::InitShardRangeInfo()
-{
-    // TODO: get shard table data from metadb and init m_shardRangeInfoList
-    // now just add a dummy data for test
-    int shardCount = 5;
-    for (int i = 0; i < shardCount; ++i) {
-        int32_t rangePoint;
-        if (i == shardCount - 1) {
-            rangePoint = INT32_MAX;
-        } else {
-            rangePoint = ((int64_t)INT32_MAX) * (i + 1) / shardCount;
-        }
-        // only one server id for test, set server id to 1
-        m_shardRangeInfoList.push_back({rangePoint, 1});
-    }
-}
-
-
-static int HashPartId(const char *fileName)
-{
-    uint16_t hashValue = 0;
-    for (size_t i = 0; i < strlen(fileName); ++i) {
-        hashValue = hashValue * 31 + fileName[i];
-    }
-    return hashValue & 0x1FFF;
-}
-
-static inline uint32_t RotateLeft32(uint32_t word, int n) { return (word << n) | (word >> (32 - n)); }
-
-static uint32_t HashBytesUint32(uint32_t k)
-{
-    uint32_t a;
-    uint32_t b;
-    uint32_t c;
-
-    a = b = c = 0x9e3779b9 + static_cast<uint32_t>(sizeof(uint32_t)) + 3923095;
-    a += k;
-
-    c ^= b;
-    c -= RotateLeft32(b, 14);
-    a ^= c;
-    a -= RotateLeft32(c, 11);
-    b ^= a;
-    b -= RotateLeft32(a, 25);
-    c ^= b;
-    c -= RotateLeft32(b, 16);
-    a ^= c;
-    a -= RotateLeft32(c, 4);
-    b ^= a;
-    b -= RotateLeft32(a, 14);
-    c ^= b;
-    c -= RotateLeft32(b, 24);
-
-    return c;
-}
-
-static uint32_t HashInt8(int64_t val)
-{
-    auto lohalf = static_cast<uint32_t>(val);
-    auto hihalf = static_cast<uint32_t>(val >> 32);
-
-    lohalf ^= (val >= 0) ? hihalf : ~hihalf;
-
-    int32_t res = HashBytesUint32(lohalf);
-
-    res &= ~(1u << 31);
-    return res;
-}
 
 
 // lifetime of job must be longer than this function. it will be freed later
@@ -142,39 +65,16 @@ void PGConnectionPoolFast::DispatchMetaServiceJob(BaseMetaServiceJob *job)
     // construct FalconSingleTaskFast to extract shard key
     std::shared_ptr<FalconSingleTaskFast> task =
         std::make_shared<FalconSingleTaskFast>(GetFalconConnectionPoolShmemAllocator(), job);
-    task->ConstructSendCommand();
-    std::string extracted_path = task->GetShardKey();
 
-    // 如果有 path，计算分片 hash 并 dispatch 到对应 connection；否则随机选择一个 connection
-    PGConnection *targetConn = nullptr;
-    if (!extracted_path.empty()) {
-        std::string path_copy = extracted_path;
-        char *name = basename(const_cast<char*>(path_copy.c_str()));
-        uint16_t partId = HashPartId(name);
-        auto shardIt = m_connShardMap.lower_bound(HashInt8(partId));
-        if (shardIt == m_connShardMap.end()) {
-            throw std::runtime_error("shard table is corrupt. cannot find target.");
-        }
-        targetConn = shardIt->second;
-    } else {
-        // 随机选择一个 connection
-        static bool seeded = false;
-        if (!seeded) {
-            srand(time(NULL));
-            seeded = true;
-        }
-        int idx = rand() % m_connShardMap.size();
-        auto it = m_connShardMap.begin();
-        std::advance(it, idx);
-        targetConn = it->second;
+    // 随机选择一个 connection
+    // 因为PG要求同一个连接不能流水线式并发执行多个查询，所以随机选择一个连接来执行任务, 多个连接一起向同一分区表执行查询提升吞吐量
+    static bool seeded = false;
+    if (!seeded) {
+        srand(time(NULL));
+        seeded = true;
     }
-
-    // 将 job 投递到目标 connection
-    if (targetConn) {
-        targetConn->Exec(task);
-    } else {
-        throw std::runtime_error("No target connection found, for path: " + extracted_path);
-    }
+    int idx = rand() % m_connVec.size();
+    m_connVec[idx]->Exec(task);
 }
 
 bool PGConnectionPoolFast::Init(const uint16_t port,
@@ -183,13 +83,10 @@ bool PGConnectionPoolFast::Init(const uint16_t port,
                             const uint16_t pendingTaskBufferMaxSize,
                             const uint16_t batchTaskBufferMaxSize)
 {
-    // Init shard range info first
-    InitShardRangeInfo();
-
-    // init m_connShardMap here, using rangepoint as key
-    for (const auto &shardInfo : m_shardRangeInfoList) {
+    // init m_connVec here
+    for (int i = 0; i < connPoolSize; ++i) {
         PGConnection *conn = new PGConnection(nullptr, "127.0.0.1", port, userName);
-        m_connShardMap[shardInfo.rangePointMax] = conn;
+        m_connVec.push_back(conn);
     }
 
     working = true;
@@ -200,13 +97,13 @@ void PGConnectionPoolFast::Destroy()
 {
     // wait all jobs finished, max wait times is 10 second.
     working = false;
-    for (auto it = m_connShardMap.begin(); it != m_connShardMap.end(); ++it) {
-        it->second->Stop();
+    for (auto conn : m_connVec) {
+        conn->Stop();
     }
-    for (auto it = m_connShardMap.begin(); it != m_connShardMap.end(); ++it) {
-        delete it->second;
+    for (auto conn : m_connVec) {
+        delete conn;
     }
-    m_connShardMap.clear();
+    m_connVec.clear();
 }
 
 bool StartPGConnectionPool()
