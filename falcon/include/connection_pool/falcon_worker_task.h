@@ -44,6 +44,8 @@ class SingleWorkerTask : public BaseWorkerTask {
     ~SingleWorkerTask() override {}
     // implement logic of SingleWorker process
     void DoWork(PGconn *conn, flatbuffers::FlatBufferBuilder &flatBufferBuilder, SerializedData &replyBuilder) override;
+
+    BaseMetaServiceJob *GetJob() const { return m_job; }
 };
 
 class BatchWorkerTask : public BaseWorkerTask {
@@ -59,6 +61,8 @@ class BatchWorkerTask : public BaseWorkerTask {
     ~BatchWorkerTask() override {}
     // implement logic of BatchWorker process
     void DoWork(PGconn *conn, flatbuffers::FlatBufferBuilder &flatBufferBuilder, SerializedData &replyBuilder) override;
+
+    const std::vector<BaseMetaServiceJob *> &GetJobList() const { return m_jobList; }
 };
 
 #endif // FALCON_WORKER_TASK_H

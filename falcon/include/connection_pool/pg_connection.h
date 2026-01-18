@@ -18,19 +18,12 @@
 #include "falcon_worker_task.h"
 #include "libpq-fe.h"
 #include "remote_connection_utils/serialized_data.h"
+#include "utils/falcon_shmem_allocator.h"
 
 class PGConnection {
-  private:
-    typedef std::function<void(PGConnection *conn)> PGConnectionWorkFinishNotifyFunc;
-    bool working;
-    flatbuffers::FlatBufferBuilder flatBufferBuilder;
-    SerializedData replyBuilder;
-
-    moodycamel::BlockingConcurrentQueue<std::shared_ptr<BaseWorkerTask>> m_workerTaskQueue;
-    std::thread thread;
-    PGconn *conn;
-
   public:
+    typedef std::function<void(PGConnection *conn)> PGConnectionWorkFinishNotifyFunc;
+
     PGConnection(PGConnectionWorkFinishNotifyFunc func, const char *ip, const int port, const char *userName);
     ~PGConnection();
 
@@ -38,7 +31,18 @@ class PGConnection {
 
     void Exec(std::shared_ptr<BaseWorkerTask> taskToExec);
 
+    void DoWork(BaseMetaServiceJob *job, PGconn *conn, flatbuffers::FlatBufferBuilder &flatBufferBuilder, SerializedData &replyBuilder);
+
     void Stop();
+
+  private:
+    bool working;
+    flatbuffers::FlatBufferBuilder flatBufferBuilder;
+    SerializedData replyBuilder;
+
+    moodycamel::BlockingConcurrentQueue<std::shared_ptr<BaseWorkerTask>> m_workerTaskQueue;
+    std::thread thread;
+    PGconn *conn;
 };
 
 #endif
