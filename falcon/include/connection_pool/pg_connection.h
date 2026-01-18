@@ -15,7 +15,7 @@
 #include <vector>
 #include "concurrentqueue/blockingconcurrentqueue.h"
 #include <flatbuffers/flatbuffers.h>
-#include "falcon_worker_task.h"
+#include "base_comm_adapter/base_meta_service_job.h"
 #include "libpq-fe.h"
 #include "remote_connection_utils/serialized_data.h"
 #include "utils/falcon_shmem_allocator.h"
@@ -29,7 +29,7 @@ class PGConnection {
 
     void BackgroundWorker();
 
-    void Exec(std::shared_ptr<BaseWorkerTask> taskToExec);
+    void Exec(BaseMetaServiceJob *jobPtr);
 
     void DoWork(BaseMetaServiceJob *job, PGconn *conn, flatbuffers::FlatBufferBuilder &flatBufferBuilder, SerializedData &replyBuilder);
 
@@ -40,7 +40,7 @@ class PGConnection {
     flatbuffers::FlatBufferBuilder flatBufferBuilder;
     SerializedData replyBuilder;
 
-    moodycamel::BlockingConcurrentQueue<std::shared_ptr<BaseWorkerTask>> m_workerTaskQueue;
+    moodycamel::BlockingConcurrentQueue<BaseMetaServiceJob *> m_workerTaskQueue;
     std::thread thread;
     PGconn *conn;
 };

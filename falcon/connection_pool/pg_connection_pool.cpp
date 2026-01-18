@@ -56,12 +56,6 @@ void PGConnectionPool::DispatchMetaServiceJob(BaseMetaServiceJob *job)
         throw std::runtime_error("job is empty.");
     }
 
-    // construct SingleWorkerTask
-    auto workerTaskPtr = std::make_shared<SingleWorkerTask>(GetFalconConnectionPoolShmemAllocator(), job);
-    if (workerTaskPtr == nullptr) {
-        throw std::runtime_error("make_shared<SingleWorkerTask> failed, out of memory.");
-    }
-
     // 随机选择一个 connection
     // 因为PG要求同一个连接不能流水线式并发执行多个查询，所以随机选择一个连接来执行任务, 多个连接一起向同一分区表执行查询提升吞吐量
     static bool seeded = false;
@@ -70,7 +64,7 @@ void PGConnectionPool::DispatchMetaServiceJob(BaseMetaServiceJob *job)
         seeded = true;
     }
     int idx = rand() % m_connVec.size();
-    m_connVec[idx]->Exec(workerTaskPtr);
+    m_connVec[idx]->Exec(job);
 }
 
 bool PGConnectionPool::Init(const uint16_t port,

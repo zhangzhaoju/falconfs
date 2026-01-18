@@ -5,10 +5,12 @@
 #include "connection_pool/pg_connection.h"
 #include <iostream>
 #include <sstream>
+#include <vector>
 #include "falcon_meta_param_generated.h"
 #include "falcon_meta_response_generated.h"
 #include "utils/falcon_shmem_allocator.h"
 #include "remote_connection_utils/error_code_def.h"
+#include "connection_pool/connection_pool_config.h"
 
 extern "C" {
 #include "utils/error_code.h"
@@ -38,26 +40,27 @@ void PGConnection::BackgroundWorker()
     while (working) {
         if (!working)
             break;
-        std::shared_ptr<BaseWorkerTask> baseWorkerTaskPtr(nullptr);
-        m_workerTaskQueue.wait_dequeue(baseWorkerTaskPtr);
-        if (auto singleTask = dynamic_cast<SingleWorkerTask *>(baseWorkerTaskPtr.get())) {
-            BaseMetaServiceJob *job = singleTask->GetJob();
+
+        // batch dequeue up to FalconConnectionPoolBatchSize jobs
+        int maxBatch = FalconConnectionPoolBatchSize > 0 ? FalconConnectionPoolBatchSize : 1;
+        std::vector<BaseMetaServiceJob *> jobs;
+        jobs.resize(maxBatch);
+
+        // wait_dequeue_bulk will block until at least one element is available
+        size_t dequeued = m_workerTaskQueue.wait_dequeue_bulk(jobs.data(), maxBatch);
+        for (size_t i = 0; i < dequeued; ++i) {
+            BaseMetaServiceJob *job = jobs[i];
+            if (job == nullptr)
+                continue;
             DoWork(job, conn, flatBufferBuilder, replyBuilder);
             delete job;
-        } else if (auto batchTask = dynamic_cast<BatchWorkerTask *>(baseWorkerTaskPtr.get())) {
-            for (auto job : batchTask->GetJobList()) {
-                DoWork(job, conn, flatBufferBuilder, replyBuilder);
-                delete job;
-            }
         }
-        // now no one handle the ptr, auto release WorkerTask
-        baseWorkerTaskPtr = nullptr;
     }
 }
 
-void PGConnection::Exec(std::shared_ptr<BaseWorkerTask> workerTaskPtr)
+void PGConnection::Exec(BaseMetaServiceJob *jobPtr)
 {
-    while (!this->m_workerTaskQueue.enqueue(workerTaskPtr)) {
+    while (!this->m_workerTaskQueue.enqueue(jobPtr)) {
         std::cout << "PGConnection::Exec: enqueue failed" << std::endl;
         std::this_thread::yield();
     }
