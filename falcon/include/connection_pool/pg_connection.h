@@ -31,7 +31,7 @@ class PGConnection {
 
     void Exec(BaseMetaServiceJob *jobPtr);
 
-    void DoWork(BaseMetaServiceJob *job, PGconn *conn, flatbuffers::FlatBufferBuilder &flatBufferBuilder, SerializedData &replyBuilder);
+    void DoWork(const std::vector<BaseMetaServiceJob *> &jobs, PGconn *conn, flatbuffers::FlatBufferBuilder &flatBufferBuilder, SerializedData &replyBuilder);
 
     void Stop();
 
