@@ -64,5 +64,6 @@ typedef struct MetaProcessInfoData
 typedef MetaProcessInfoData *MetaProcessInfo;
 
 int pg_qsort_meta_process_info_by_path_cmp(const void *a, const void *b);
+int pg_qsort_meta_process_info_by_service_type(const void *a, const void *b);
 
 #endif
