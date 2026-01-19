@@ -5,7 +5,7 @@ source $DIR/falcon_meta_config.sh
 CPU_HALF=$(( $(nproc) / 2 ))
 [ $CPU_HALF -eq 0 ] && CPU_HALF=32
 FalconConnectionPoolSize=$CPU_HALF
-FalconConnectionPoolBatchSize=1024
+FalconConnectionPoolBatchSize=128
 FalconConnectionPoolWaitAdjust=1
 FalconConnectionPoolWaitMin=1
 FalconConnectionPoolWaitMax=500
@@ -16,7 +16,7 @@ server_name_list=()
 server_ip_list=()
 server_port_list=()
 
-shardcount=5
+shardcount=15
 
 if [[ "$cnIp" == "$localIp" ]]; then
     cnPath="${cnPathPrefix}0"
