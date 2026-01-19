@@ -3,6 +3,7 @@
  */
 
 #include "connection_pool/pg_connection.h"
+#include <chrono>
 #include <iostream>
 #include <sstream>
 #include <vector>
@@ -33,6 +34,7 @@ PGConnection::PGConnection(PGConnectionWorkFinishNotifyFunc func, const char *ip
 
     SerializedDataInit(&m_replyData, NULL, 0, 0, NULL);
     m_jobProcessThread = std::thread(&PGConnection::BackgroundWorker, this);
+    m_jobDoneThread = std::thread(&PGConnection::JobDoneWorker, this);
 }
 
 void PGConnection::BackgroundWorker()
@@ -45,21 +47,32 @@ void PGConnection::BackgroundWorker()
         if (!m_working)
             break;
         // wait_dequeue_bulk will block until at least one element is available
-        size_t dequeued = m_workerTaskQueue.wait_dequeue_bulk(jobs.data(), maxBatch);
+        size_t dequeued = m_jobsWaitingProcessQueue.wait_dequeue_bulk(jobs.data(), maxBatch);
         if (dequeued == 0)
             continue;
 
         DoWork(jobs, dequeued);
-        for (size_t i = 0; i < dequeued; ++i) {
-            delete jobs[i];
-            jobs[i] = nullptr;
+    }
+}
+
+void PGConnection::JobDoneWorker()
+{
+    BaseMetaServiceJob *job = nullptr;
+    while (true) {
+        if (m_jobsWaitingDoneQueue.wait_dequeue_timed(job, std::chrono::milliseconds(100))) {
+            if (job == nullptr)
+                continue;
+            job->Done();
+            delete job;
+        } else if (!m_working) {
+            break;
         }
     }
 }
 
 void PGConnection::Exec(BaseMetaServiceJob *jobPtr)
 {
-    while (!this->m_workerTaskQueue.enqueue(jobPtr)) {
+    while (!this->m_jobsWaitingProcessQueue.enqueue(jobPtr)) {
         std::cout << "PGConnection::Exec: enqueue failed" << std::endl;
         std::this_thread::yield();
     }
@@ -180,7 +193,9 @@ void PGConnection::HandlePlainCommand(BaseMetaServiceJob *job)
     }
 
     job->ProcessResponse(replyData.buffer, replyData.size, NULL);
-    job->Done();
+    while (!m_jobsWaitingDoneQueue.enqueue(job)) {
+        std::this_thread::yield();
+    }
 
     for (size_t r = 0; r < result.size(); ++r) {
         PQclear(result[r]);
@@ -258,7 +273,9 @@ void PGConnection::HandleBatchJobs(const std::vector<BaseMetaServiceJob *> &jobs
             char *data = (char *)malloc(m_replyData.size);
             memcpy(data, m_replyData.buffer, m_replyData.size);
             jobs[k]->ProcessResponse(data, m_replyData.size, NULL);
-            jobs[k]->Done();
+            while (!m_jobsWaitingDoneQueue.enqueue(jobs[k])) {
+                std::this_thread::yield();
+            }
         }
     } else {
         if (PQntuples(res) != 1 || PQnfields(res) != 1) {
@@ -281,13 +298,17 @@ void PGConnection::HandleBatchJobs(const std::vector<BaseMetaServiceJob *> &jobs
                 char *data = (char *)malloc(sz);
                 memcpy(data, replyBuffer + p, sz);
                 jobs[k]->ProcessResponse(data, sz, NULL);
-                jobs[k]->Done();
+                while (!m_jobsWaitingDoneQueue.enqueue(jobs[k])) {
+                    std::this_thread::yield();
+                }
                 p += sz;
             }
             FalconShmemAllocatorFree(GetFalconConnectionPoolShmemAllocator(), replyShift);
         } else {
             for (size_t k = startIdx; k < endIdx; ++k) {
-                jobs[k]->Done();
+                while (!m_jobsWaitingDoneQueue.enqueue(jobs[k])) {
+                    std::this_thread::yield();
+                }
             }
         }
     }
@@ -302,6 +323,7 @@ PGConnection::~PGConnection()
 {
     Stop();
     m_jobProcessThread.join();
+    m_jobDoneThread.join();
     if (m_conn) {
         PQfinish(m_conn);
         m_conn = nullptr;

@@ -28,6 +28,7 @@ class PGConnection {
     ~PGConnection();
 
     void BackgroundWorker();
+    void JobDoneWorker();
 
     void Exec(BaseMetaServiceJob *jobPtr);
 
@@ -42,8 +43,10 @@ class PGConnection {
     flatbuffers::FlatBufferBuilder m_flatBufferBuilder;
     SerializedData m_replyData;
 
-    moodycamel::BlockingConcurrentQueue<BaseMetaServiceJob *> m_workerTaskQueue;
+    moodycamel::BlockingConcurrentQueue<BaseMetaServiceJob *> m_jobsWaitingProcessQueue;
+    moodycamel::BlockingConcurrentQueue<BaseMetaServiceJob *> m_jobsWaitingDoneQueue;
     std::thread m_jobProcessThread;
+    std::thread m_jobDoneThread;
     PGconn *m_conn;
 };
 
