@@ -39,6 +39,7 @@ class FalconBrpcServer {
         butil::EndPoint point;
         point = butil::EndPoint(brpcServerIp, m_port);
         brpc::ServerOptions options;
+        options.num_threads = 8;
         if (m_server.Start(point, &options) != 0)
             throw std::runtime_error("FalconBrpcServer: failed to start server.");
 

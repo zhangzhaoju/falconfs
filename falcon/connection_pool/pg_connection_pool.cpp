@@ -60,7 +60,10 @@ void PGConnectionPool::DispatchMetaServiceJob(BaseMetaServiceJob *job)
 
     // 轮询选择一个 connection
     // 因为PG要求同一个连接不能流水线式并发执行多个查询，所以轮询选择一个连接来执行任务, 多个连接一起向同一分区表执行查询提升吞吐量
-    size_t idx = m_roundRobinIndex.fetch_add(1) % m_connVec.size();
+    // size_t idx = m_roundRobinIndex.fetch_add(1) % m_connVec.size();
+
+    __pid_t tid = gettid();
+    size_t idx = tid % m_connVec.size();
     m_connVec[idx]->Exec(job);
 }
 

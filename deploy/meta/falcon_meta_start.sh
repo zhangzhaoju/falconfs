@@ -2,10 +2,10 @@
 DIR=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
 source $DIR/falcon_meta_config.sh
 
-CPU_HALF=$(( $(nproc) / 2 ))
+CPU_HALF=8
 [ $CPU_HALF -eq 0 ] && CPU_HALF=32
 FalconConnectionPoolSize=$CPU_HALF
-FalconConnectionPoolBatchSize=128
+FalconConnectionPoolBatchSize=32
 FalconConnectionPoolWaitAdjust=1
 FalconConnectionPoolWaitMin=1
 FalconConnectionPoolWaitMax=500

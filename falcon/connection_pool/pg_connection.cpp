@@ -16,6 +16,7 @@
 extern "C" {
 #include "utils/error_code.h"
 #include "utils/utils_standalone.h"
+#include "metadb/meta_process_info.h"
 }
 
 PGConnection::PGConnection(PGConnectionWorkFinishNotifyFunc func, const char *ip, const int port, const char *userName)
@@ -202,9 +203,213 @@ void PGConnection::HandlePlainCommand(BaseMetaServiceJob *job)
     }
 }
 
+static bool SerializedDataMetaResponseEncode(int count,
+                                             MetaProcessInfoData *infoArray,
+                                             flatbuffers::FlatBufferBuilder &builder,
+                                             SerializedData *response)
+{
+    for (int i = 0; i < count; ++i) {
+        builder.Clear();
+        MetaProcessInfo info = infoArray + i;
+        flatbuffers::Offset<falcon::meta_fbs::MetaResponse> metaResponse;
+        if (info->errorCode != SUCCESS && info->errorCode != FILE_EXISTS) {
+            //
+            metaResponse = falcon::meta_fbs::CreateMetaResponse(builder, info->errorCode);
+        } else {
+            switch (info->serviceType) {
+            case FalconMetaServiceType::MKDIR:
+            case FalconMetaServiceType::MKDIR_SUB_MKDIR:
+            case FalconMetaServiceType::MKDIR_SUB_CREATE:
+            case FalconMetaServiceType::CLOSE:
+            case FalconMetaServiceType::RMDIR:
+            case FalconMetaServiceType::RMDIR_SUB_RMDIR:
+            case FalconMetaServiceType::RMDIR_SUB_UNLINK:
+            case FalconMetaServiceType::RENAME:
+            case FalconMetaServiceType::RENAME_SUB_CREATE:
+            case FalconMetaServiceType::UTIMENS:
+            case FalconMetaServiceType::CHOWN:
+            case FalconMetaServiceType::CHMOD: {
+                // error code only response
+                metaResponse = falcon::meta_fbs::CreateMetaResponse(builder, info->errorCode);
+                break;
+            }
+            case FalconMetaServiceType::CREATE: {
+                // auto createResponse = falcon::meta_fbs::CreateCreateResponse(builder, info->inodeId);
+                auto createResponse = falcon::meta_fbs::CreateCreateResponse(builder,
+                                                                             info->inodeId,
+                                                                             info->node_id,
+                                                                             info->st_dev,
+                                                                             info->st_mode,
+                                                                             info->st_nlink,
+                                                                             info->st_uid,
+                                                                             info->st_gid,
+                                                                             info->st_rdev,
+                                                                             info->st_size,
+                                                                             info->st_blksize,
+                                                                             info->st_blocks,
+                                                                             info->st_atim,
+                                                                             info->st_mtim,
+                                                                             info->st_ctim);
+                metaResponse = falcon::meta_fbs::CreateMetaResponse(builder,
+                                                                    info->errorCode,
+                                                                    falcon::meta_fbs::AnyMetaResponse_CreateResponse,
+                                                                    createResponse.Union());
+                break;
+            }
+            case FalconMetaServiceType::STAT: {
+                auto statResponse = falcon::meta_fbs::CreateStatResponse(builder,
+                                                                         info->inodeId,
+                                                                         info->st_dev,
+                                                                         info->st_mode,
+                                                                         info->st_nlink,
+                                                                         info->st_uid,
+                                                                         info->st_gid,
+                                                                         info->st_rdev,
+                                                                         info->st_size,
+                                                                         info->st_blksize,
+                                                                         info->st_blocks,
+                                                                         info->st_atim,
+                                                                         info->st_mtim,
+                                                                         info->st_ctim);
+                metaResponse = falcon::meta_fbs::CreateMetaResponse(builder,
+                                                                    info->errorCode,
+                                                                    falcon::meta_fbs::AnyMetaResponse_StatResponse,
+                                                                    statResponse.Union());
+                break;
+            }
+            case FalconMetaServiceType::OPEN: {
+                auto openResponse = falcon::meta_fbs::CreateOpenResponse(builder,
+                                                                         info->inodeId,
+                                                                         info->node_id,
+                                                                         info->st_dev,
+                                                                         info->st_mode,
+                                                                         info->st_nlink,
+                                                                         info->st_uid,
+                                                                         info->st_gid,
+                                                                         info->st_rdev,
+                                                                         info->st_size,
+                                                                         info->st_blksize,
+                                                                         info->st_blocks,
+                                                                         info->st_atim,
+                                                                         info->st_mtim,
+                                                                         info->st_ctim);
+                metaResponse = falcon::meta_fbs::CreateMetaResponse(builder,
+                                                                    info->errorCode,
+                                                                    falcon::meta_fbs::AnyMetaResponse_OpenResponse,
+                                                                    openResponse.Union());
+                break;
+            }
+            case FalconMetaServiceType::UNLINK: {
+                auto unlinkResponse =
+                    falcon::meta_fbs::CreateUnlinkResponse(builder, info->inodeId, info->st_size, info->node_id);
+                metaResponse = falcon::meta_fbs::CreateMetaResponse(builder,
+                                                                    info->errorCode,
+                                                                    falcon::meta_fbs::AnyMetaResponse_UnlinkResponse,
+                                                                    unlinkResponse.Union());
+                break;
+            }
+            case FalconMetaServiceType::READDIR: {
+                std::vector<flatbuffers::Offset<falcon::meta_fbs::OneReadDirResponse>> readDirResultList;
+                for (int j = 0; j < info->readDirResultCount; ++j)
+                    readDirResultList.push_back(
+                        falcon::meta_fbs::CreateOneReadDirResponseDirect(builder,
+                                                                         info->readDirResultList[j]->fileName,
+                                                                         info->readDirResultList[j]->mode));
+                auto readDirResponse = falcon::meta_fbs::CreateReadDirResponseDirect(builder,
+                                                                                     info->readDirLastShardIndex,
+                                                                                     info->readDirLastFileName,
+                                                                                     &readDirResultList);
+                metaResponse = falcon::meta_fbs::CreateMetaResponse(builder,
+                                                                    info->errorCode,
+                                                                    falcon::meta_fbs::AnyMetaResponse_ReadDirResponse,
+                                                                    readDirResponse.Union());
+                break;
+            }
+            case FalconMetaServiceType::OPENDIR: {
+                auto openDirResponse = falcon::meta_fbs::CreateOpenDirResponse(builder, info->inodeId);
+                metaResponse = falcon::meta_fbs::CreateMetaResponse(builder,
+                                                                    info->errorCode,
+                                                                    falcon::meta_fbs::AnyMetaResponse_OpenDirResponse,
+                                                                    openDirResponse.Union());
+                break;
+            }
+            case FalconMetaServiceType::RENAME_SUB_RENAME_LOCALLY: {
+                if (info->parentId_partId != 0 && info->dstParentIdPartId == 0) {
+                    auto renameSubRenameLocallyResponse =
+                        falcon::meta_fbs::CreateRenameSubRenameLocallyResponse(builder,
+                                                                               info->inodeId,
+                                                                               info->st_dev,
+                                                                               info->st_mode,
+                                                                               info->st_nlink,
+                                                                               info->st_uid,
+                                                                               info->st_gid,
+                                                                               info->st_rdev,
+                                                                               info->st_size,
+                                                                               info->st_blksize,
+                                                                               info->st_blocks,
+                                                                               info->st_atim,
+                                                                               info->st_mtim,
+                                                                               info->st_ctim,
+                                                                               info->node_id);
+                    metaResponse = falcon::meta_fbs::CreateMetaResponse(
+                        builder,
+                        info->errorCode,
+                        falcon::meta_fbs::AnyMetaResponse_RenameSubRenameLocallyResponse,
+                        renameSubRenameLocallyResponse.Union());
+                } else {
+                    metaResponse = falcon::meta_fbs::CreateMetaResponse(builder, info->errorCode);
+                }
+                break;
+            }
+            default:
+                return false;
+            }
+        }
+        builder.Finish(metaResponse);
+
+        char *buffer = SerializedDataApplyForSegment(response, builder.GetSize());
+        memcpy(buffer, builder.GetBufferPointer(), builder.GetSize());
+    }
+    return true;
+}
+
 void PGConnection::HandleBatchJobs(const std::vector<BaseMetaServiceJob *> &jobs, size_t startIdx, size_t endIdx)
 {
+    static uint64_t cnt = 0;
     FalconMetaServiceType serviceType = jobs[startIdx]->GetFalconMetaServiceType(0);
+    if (cnt > 100) {
+        for (size_t k = startIdx; k < endIdx; ++k) {
+            MetaProcessInfoData info;
+            info.serviceType = jobs[k]->GetFalconMetaServiceType(0);
+            ;
+            info.errorCode = SUCCESS;
+            info.errorMsg = NULL;
+            info.dstName = "";
+            info.st_dev = 1;
+            info.st_mode = 1;
+            info.st_nlink = 1;
+            info.st_uid = 1;
+            info.st_gid = 1;
+            info.st_rdev = 1;
+            info.st_size = 1;
+            info.st_blksize = 1;
+            info.st_blocks = 1;
+            info.st_atim = 1;
+            info.st_mtim = 1;
+            info.st_ctim = 1;
+            info.etag = "";
+            SerializedData response;
+            SerializedDataInit(&response, NULL, 0, 0, nullptr);
+            SerializedDataMetaResponseEncode(1, &info, m_flatBufferBuilder, &response);
+            jobs[k]->ProcessResponse(response.buffer, response.size, NULL);
+            jobs[k]->Done();
+            delete jobs[k];
+        }
+        return;
+    } else {
+        cnt += endIdx - startIdx;
+    }
+
     uint32_t totalRequestServiceCount = 0;
     size_t totalParamSize = 0;
     for (size_t k = startIdx; k < endIdx; ++k) {
