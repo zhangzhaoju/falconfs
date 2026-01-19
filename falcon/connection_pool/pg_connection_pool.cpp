@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
+#include <atomic>
 #include "base_comm_adapter/base_meta_service_job.h"
 #include "concurrentqueue/concurrentqueue.h"
 #include "connection_pool/connection_pool_config.h"
@@ -45,6 +46,7 @@ class PGConnectionPool {
     // vector of connections, used to dispatch job to specified connection
     std::vector<PGConnection *> m_connVec;
     bool working{false};
+    std::atomic<size_t> m_roundRobinIndex{0};
 };
 
 
@@ -56,14 +58,9 @@ void PGConnectionPool::DispatchMetaServiceJob(BaseMetaServiceJob *job)
         throw std::runtime_error("job is empty.");
     }
 
-    // 随机选择一个 connection
-    // 因为PG要求同一个连接不能流水线式并发执行多个查询，所以随机选择一个连接来执行任务, 多个连接一起向同一分区表执行查询提升吞吐量
-    static bool seeded = false;
-    if (!seeded) {
-        srand(time(NULL));
-        seeded = true;
-    }
-    int idx = rand() % m_connVec.size();
+    // 轮询选择一个 connection
+    // 因为PG要求同一个连接不能流水线式并发执行多个查询，所以轮询选择一个连接来执行任务, 多个连接一起向同一分区表执行查询提升吞吐量
+    size_t idx = m_roundRobinIndex.fetch_add(1) % m_connVec.size();
     m_connVec[idx]->Exec(job);
 }
 
