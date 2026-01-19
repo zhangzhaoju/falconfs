@@ -31,18 +31,20 @@ class PGConnection {
 
     void Exec(BaseMetaServiceJob *jobPtr);
 
-    void DoWork(const std::vector<BaseMetaServiceJob *> &jobs, PGconn *conn, flatbuffers::FlatBufferBuilder &flatBufferBuilder, SerializedData &replyBuilder);
-
     void Stop();
 
   private:
-    bool working;
-    flatbuffers::FlatBufferBuilder flatBufferBuilder;
-    SerializedData replyBuilder;
+    void DoWork(const std::vector<BaseMetaServiceJob *> &jobs, size_t realSize);
+    void HandlePlainCommand(BaseMetaServiceJob *job);
+    void HandleBatchJobs(const std::vector<BaseMetaServiceJob *> &jobs, size_t startIdx, size_t endIdx);
+
+    bool m_working;
+    flatbuffers::FlatBufferBuilder m_flatBufferBuilder;
+    SerializedData m_replyData;
 
     moodycamel::BlockingConcurrentQueue<BaseMetaServiceJob *> m_workerTaskQueue;
-    std::thread thread;
-    PGconn *conn;
+    std::thread m_jobProcessThread;
+    PGconn *m_conn;
 };
 
 #endif
