@@ -31,67 +31,84 @@ static SerializedData MetaProcess(int count, char *paramBuffer)
     for (int i = 0; i < count; i++)
         infoArray[i] = infoDataArray + i;
 
-    for (int i = 0; i < count; i++) {
-        switch (infoArray[i]->serviceType) {
-        case MKDIR:
-            FalconMkdirHandle(&infoArray[i], 1);
-            break;
-        case MKDIR_SUB_MKDIR:
-            FalconMkdirSubMkdirHandle(&infoArray[i], 1);
-            break;
-        case MKDIR_SUB_CREATE:
-            FalconMkdirSubCreateHandle(&infoArray[i], 1);
-            break;
-        case CREATE:
-            FalconCreateHandle(&infoArray[i], 1, false);
-            break;
-        case STAT:
-            FalconStatHandle(&infoArray[i], 1);
-            break;
-        case OPEN:
-            FalconOpenHandle(&infoArray[i], 1);
-            break;
-        case CLOSE:
-            FalconCloseHandle(&infoArray[i], 1);
-            break;
-        case UNLINK:
-            FalconUnlinkHandle(&infoArray[i], 1);
-            break;
-        case READDIR:
-            FalconReadDirHandle(infoArray[i]);
-            break;
-        case OPENDIR:
-            FalconOpenDirHandle(infoArray[i]);
-            break;
-        case RMDIR:
-            FalconRmdirHandle(infoArray[i]);
-            break;
-        case RMDIR_SUB_RMDIR:
-            FalconRmdirSubRmdirHandle(infoArray[i]);
-            break;
-        case RMDIR_SUB_UNLINK:
-            FalconRmdirSubUnlinkHandle(infoArray[i]);
-            break;
-        case RENAME:
-            FalconRenameHandle(infoArray[i]);
-            break;
-        case RENAME_SUB_RENAME_LOCALLY:
-            FalconRenameSubRenameLocallyHandle(infoArray[i]);
-            break;
-        case RENAME_SUB_CREATE:
-            FalconRenameSubCreateHandle(infoArray[i]);
-            break;
-        case UTIMENS:
-            FalconUtimeNsHandle(infoArray[i]);
-            break;
-        case CHOWN:
-            FalconChownHandle(infoArray[i]);
-            break;
-        case CHMOD:
-            FalconChmodHandle(infoArray[i]);
-            break;
-        default:
-            FALCON_ELOG_ERROR_EXTENDED(ARGUMENT_ERROR, "unexpected serviceType: %d", infoArray[i]->serviceType);
+    // 排序按serviceType, 方便同一类型的任务批量处理
+    pg_qsort(infoArray, count, sizeof(MetaProcessInfo), pg_qsort_meta_process_info_by_service_type);
+
+    int i = 0;
+    while (i < count) {
+        FalconMetaServiceType currentType = infoArray[i]->serviceType;
+        if (currentType == MKDIR || currentType == MKDIR_SUB_MKDIR || currentType == MKDIR_SUB_CREATE ||
+            currentType == CREATE || currentType == STAT || currentType == OPEN || currentType == CLOSE || currentType == UNLINK) {
+            // 支持批量
+            int start = i;
+            while (i < count && infoArray[i]->serviceType == currentType) i++;
+            int batchSize = i - start;
+            switch (currentType) {
+            case MKDIR:
+                FalconMkdirHandle(infoArray + start, batchSize);
+                break;
+            case MKDIR_SUB_MKDIR:
+                FalconMkdirSubMkdirHandle(infoArray + start, batchSize);
+                break;
+            case MKDIR_SUB_CREATE:
+                FalconMkdirSubCreateHandle(infoArray + start, batchSize);
+                break;
+            case CREATE:
+                FalconCreateHandle(infoArray + start, batchSize, false);
+                break;
+            case STAT:
+                FalconStatHandle(infoArray + start, batchSize);
+                break;
+            case OPEN:
+                FalconOpenHandle(infoArray + start, batchSize);
+                break;
+            case CLOSE:
+                FalconCloseHandle(infoArray + start, batchSize);
+                break;
+            case UNLINK:
+                FalconUnlinkHandle(infoArray + start, batchSize);
+                break;
+            }
+        } else {
+            // 不支持批量，单个调用
+            switch (currentType) {
+            case READDIR:
+                FalconReadDirHandle(infoArray[i]);
+                break;
+            case OPENDIR:
+                FalconOpenDirHandle(infoArray[i]);
+                break;
+            case RMDIR:
+                FalconRmdirHandle(infoArray[i]);
+                break;
+            case RMDIR_SUB_RMDIR:
+                FalconRmdirSubRmdirHandle(infoArray[i]);
+                break;
+            case RMDIR_SUB_UNLINK:
+                FalconRmdirSubUnlinkHandle(infoArray[i]);
+                break;
+            case RENAME:
+                FalconRenameHandle(infoArray[i]);
+                break;
+            case RENAME_SUB_RENAME_LOCALLY:
+                FalconRenameSubRenameLocallyHandle(infoArray[i]);
+                break;
+            case RENAME_SUB_CREATE:
+                FalconRenameSubCreateHandle(infoArray[i]);
+                break;
+            case UTIMENS:
+                FalconUtimeNsHandle(infoArray[i]);
+                break;
+            case CHOWN:
+                FalconChownHandle(infoArray[i]);
+                break;
+            case CHMOD:
+                FalconChmodHandle(infoArray[i]);
+                break;
+            default:
+                FALCON_ELOG_ERROR_EXTENDED(ARGUMENT_ERROR, "unexpected serviceType: %d", currentType);
+            }
+            i++;
         }
     }
 

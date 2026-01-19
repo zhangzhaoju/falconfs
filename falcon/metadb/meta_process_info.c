@@ -12,3 +12,10 @@ int pg_qsort_meta_process_info_by_path_cmp(const void *a, const void *b)
     MetaProcessInfo pb = *(MetaProcessInfo *)b;
     return pathcmp(pa->path, pb->path);
 }
+
+int pg_qsort_meta_process_info_by_service_type(const void *a, const void *b)
+{
+    MetaProcessInfo pa = *(MetaProcessInfo *)a;
+    MetaProcessInfo pb = *(MetaProcessInfo *)b;
+    return pa->serviceType - pb->serviceType;
+}
