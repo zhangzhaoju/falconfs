@@ -105,15 +105,12 @@ bool PGConnectionPool::Init(const uint16_t port,
                             const uint16_t batchTaskBufferMaxSize)
 {
     // init m_connVec here
+    auto onConnectionIdle = [this](PGConnection *conn) {
+        // connection notifies pool it is idle again
+        m_idleConnQueue.enqueue(conn);
+    };
     for (int i = 0; i < connPoolSize; ++i) {
-        PGConnection *conn = new PGConnection(
-            [this](PGConnection *conn) {
-                // connection notifies pool it is idle again
-                m_idleConnQueue.enqueue(conn);
-            },
-            "127.0.0.1",
-            port,
-            userName);
+        PGConnection *conn = new PGConnection(onConnectionIdle, "127.0.0.1", port, userName);
         m_connVec.push_back(conn);
         m_idleConnQueue.enqueue(conn);
     }
@@ -134,8 +131,6 @@ void PGConnectionPool::Destroy()
     }
     for (auto conn : m_connVec) {
         conn->Stop();
-    }
-    for (auto conn : m_connVec) {
         delete conn;
     }
     m_connVec.clear();
