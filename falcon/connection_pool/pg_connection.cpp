@@ -21,6 +21,7 @@ extern "C" {
 PGConnection::PGConnection(PGConnectionWorkFinishNotifyFunc func, const char *ip, const int port, const char *userName)
 {
     m_working = true;
+    m_workFinishNotify = func;
     std::stringstream ss;
     ss << "hostaddr=" << ip << " port=" << port << " user=" << userName << " dbname=postgres";
     m_conn = PQconnectdb(ss.str().c_str());
@@ -48,10 +49,9 @@ void PGConnection::BackgroundWorker()
             break;
         // wait_dequeue_bulk will block until at least one element is available
         size_t dequeued = m_jobsWaitingProcessQueue.wait_dequeue_bulk(jobs.data(), maxBatch);
-        if (dequeued == 0)
-            continue;
-
         DoWork(jobs, dequeued);
+        // return connections to idle queue
+        m_workFinishNotify(this);
     }
 }
 
@@ -74,6 +74,16 @@ void PGConnection::Exec(BaseMetaServiceJob *jobPtr)
 {
     while (!this->m_jobsWaitingProcessQueue.enqueue(jobPtr)) {
         std::cout << "PGConnection::Exec: enqueue failed" << std::endl;
+        std::this_thread::yield();
+    }
+}
+
+void PGConnection::ExecBulk(BaseMetaServiceJob **jobs, size_t count)
+{
+    if (jobs == nullptr || count == 0) {
+        return;
+    }
+    while (!this->m_jobsWaitingProcessQueue.enqueue_bulk(jobs, count)) {
         std::this_thread::yield();
     }
 }

@@ -10,8 +10,10 @@
 #include <ctime>
 #include <iostream>
 #include <atomic>
+#include <thread>
+#include <chrono>
 #include "base_comm_adapter/base_meta_service_job.h"
-#include "concurrentqueue/concurrentqueue.h"
+#include "concurrentqueue/blockingconcurrentqueue.h"
 #include "connection_pool/connection_pool_config.h"
 #include "connection_pool/falcon_batch_service_def.h"
 #include "connection_pool/pg_connection.h"
@@ -41,13 +43,46 @@ class PGConnectionPool {
     void Destroy();
 
   private:
+    void DispatchPendingJobs();
     // define private construct function to avoid create single instance
     PGConnectionPool() = default;
     // vector of connections, used to dispatch job to specified connection
     std::vector<PGConnection *> m_connVec;
-    bool working{false};
-    std::atomic<size_t> m_roundRobinIndex{0};
+    std::atomic<bool> working{false};
+    moodycamel::BlockingConcurrentQueue<BaseMetaServiceJob *> m_jobsWaitingProcessQueue;
+    moodycamel::BlockingConcurrentQueue<PGConnection *> m_idleConnQueue;
+    std::thread m_dispatchThread;
 };
+
+void PGConnectionPool::DispatchPendingJobs()
+{
+    // batch size aligns with connection-side processing
+    const int maxBatch = (FalconConnectionPoolBatchSize > 0) ? FalconConnectionPoolBatchSize : 1;
+    std::vector<BaseMetaServiceJob *> jobs;
+    jobs.resize(maxBatch);
+    while (working || m_jobsWaitingProcessQueue.size_approx() > 0) {
+        size_t dequeued = m_jobsWaitingProcessQueue.wait_dequeue_bulk(jobs.data(), maxBatch);
+        if (dequeued == 0) {
+            continue;
+        }
+
+        PGConnection *conn = nullptr;
+        // wait for an idle connection; bail out if shutting down
+        while (working && !m_idleConnQueue.wait_dequeue_timed(conn, std::chrono::milliseconds(100))) {
+            continue;
+        }
+
+        if (conn == nullptr) {
+            // shutdown path; requeue the chunk and exit loop
+            for (size_t i = 0; i < dequeued; ++i) {
+                m_jobsWaitingProcessQueue.enqueue(jobs[i]);
+            }
+            break;
+        }
+
+        conn->ExecBulk(jobs.data(), dequeued);
+    }
+}
 
 
 // lifetime of job must be longer than this function. it will be freed later
@@ -58,10 +93,9 @@ void PGConnectionPool::DispatchMetaServiceJob(BaseMetaServiceJob *job)
         throw std::runtime_error("job is empty.");
     }
 
-    // 轮询选择一个 connection
-    // 因为PG要求同一个连接不能流水线式并发执行多个查询，所以轮询选择一个连接来执行任务, 多个连接一起向同一分区表执行查询提升吞吐量
-    size_t idx = m_roundRobinIndex.fetch_add(1) % m_connVec.size();
-    m_connVec[idx]->Exec(job);
+    while (!m_jobsWaitingProcessQueue.enqueue(job)) {
+        std::this_thread::yield();
+    }
 }
 
 bool PGConnectionPool::Init(const uint16_t port,
@@ -72,11 +106,20 @@ bool PGConnectionPool::Init(const uint16_t port,
 {
     // init m_connVec here
     for (int i = 0; i < connPoolSize; ++i) {
-        PGConnection *conn = new PGConnection(nullptr, "127.0.0.1", port, userName);
+        PGConnection *conn = new PGConnection(
+            [this](PGConnection *conn) {
+                // connection notifies pool it is idle again
+                m_idleConnQueue.enqueue(conn);
+            },
+            "127.0.0.1",
+            port,
+            userName);
         m_connVec.push_back(conn);
+        m_idleConnQueue.enqueue(conn);
     }
 
     working = true;
+    m_dispatchThread = std::thread(&PGConnectionPool::DispatchPendingJobs, this);
     return true;
 }
 
@@ -84,6 +127,11 @@ void PGConnectionPool::Destroy()
 {
     // wait all jobs finished, max wait times is 10 second.
     working = false;
+    m_jobsWaitingProcessQueue.enqueue(nullptr);
+    m_idleConnQueue.enqueue(nullptr);
+    if (m_dispatchThread.joinable()) {
+        m_dispatchThread.join();
+    }
     for (auto conn : m_connVec) {
         conn->Stop();
     }

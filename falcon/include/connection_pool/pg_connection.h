@@ -31,6 +31,7 @@ class PGConnection {
     void JobDoneWorker();
 
     void Exec(BaseMetaServiceJob *jobPtr);
+    void ExecBulk(BaseMetaServiceJob **jobs, size_t count);
 
     void Stop();
 
@@ -47,6 +48,7 @@ class PGConnection {
     moodycamel::BlockingConcurrentQueue<BaseMetaServiceJob *> m_jobsWaitingDoneQueue;
     std::thread m_jobProcessThread;
     std::thread m_jobDoneThread;
+    PGConnectionWorkFinishNotifyFunc m_workFinishNotify;
     PGconn *m_conn;
 };
 
