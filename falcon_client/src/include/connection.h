@@ -12,6 +12,7 @@
 
 #include <brpc/channel.h>
 
+#include "falcon_meta_param_generated.h"
 #include "falcon_meta_response_generated.h"
 #include "falcon_meta_rpc.pb.h"
 #include "remote_connection_utils/error_code_def.h"
@@ -64,7 +65,7 @@ class Connection {
     brpc::Channel channel;
     falcon::meta_proto::MetaService_Stub stub;
     template <typename ParamBuilder, typename ResponseHandler, typename ResultType = void>
-    FalconErrorCode ProcessRequest(falcon::meta_proto::MetaServiceType type,
+    FalconErrorCode ProcessRequest(falcon::meta_fbs::AnyMetaParam flatBufferType,
                                    const ParamBuilder &paramBuilder,
                                    ResponseHandler responseHandler,
                                    ConnectionCache *cache = nullptr,

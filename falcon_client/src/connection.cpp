@@ -19,48 +19,10 @@
 
 #define ST_BLKSIZE 4096
 
-#define ALLOW_BATCH_WITH_OTHERS true
-
 static void BrpcDummyDeleter(void *) {}
 
-inline falcon::meta_fbs::AnyMetaParam ToFlatBuffersType(falcon::meta_proto::MetaServiceType type)
-{
-    switch (type) {
-    case falcon::meta_proto::PLAIN_COMMAND:
-        return falcon::meta_fbs::AnyMetaParam_PlainCommandParam;
-    case falcon::meta_proto::MKDIR:
-        return falcon::meta_fbs::AnyMetaParam_MkdirParam;
-    case falcon::meta_proto::CREATE:
-        return falcon::meta_fbs::AnyMetaParam_CreateParam;
-    case falcon::meta_proto::STAT:
-        return falcon::meta_fbs::AnyMetaParam_StatParam;
-    case falcon::meta_proto::OPEN:
-        return falcon::meta_fbs::AnyMetaParam_OpenParam;
-    case falcon::meta_proto::UNLINK:
-        return falcon::meta_fbs::AnyMetaParam_UnlinkParam;
-    case falcon::meta_proto::OPENDIR:
-        return falcon::meta_fbs::AnyMetaParam_OpendirParam;
-    case falcon::meta_proto::RMDIR:
-        return falcon::meta_fbs::AnyMetaParam_RmdirParam;
-    case falcon::meta_proto::CLOSE:
-        return falcon::meta_fbs::AnyMetaParam_CloseParam;
-    case falcon::meta_proto::READDIR:
-        return falcon::meta_fbs::AnyMetaParam_ReadDirParam;
-    case falcon::meta_proto::RENAME:
-        return falcon::meta_fbs::AnyMetaParam_RenameParam;
-    case falcon::meta_proto::UTIMENS:
-        return falcon::meta_fbs::AnyMetaParam_UtimeNsParam;
-    case falcon::meta_proto::CHOWN:
-        return falcon::meta_fbs::AnyMetaParam_ChownParam;
-    case falcon::meta_proto::CHMOD:
-        return falcon::meta_fbs::AnyMetaParam_ChmodParam;
-    default:
-        throw std::runtime_error("Unknown service type");
-    }
-}
-
 template <typename ParamBuilder, typename ResponseHandler, typename ResultType>
-FalconErrorCode Connection::ProcessRequest(falcon::meta_proto::MetaServiceType proto_type,
+FalconErrorCode Connection::ProcessRequest(falcon::meta_fbs::AnyMetaParam flatBufferType,
                                            const ParamBuilder &paramBuilder,
                                            ResponseHandler responseHandler,
                                            ConnectionCache *cache,
@@ -72,10 +34,8 @@ FalconErrorCode Connection::ProcessRequest(falcon::meta_proto::MetaServiceType p
     // 1. Prepare param
     SerializedDataClear(&cache->serializedDataBuffer);
     cache->flatBufferBuilder.Clear();
-    auto type = ToFlatBuffersType(proto_type);
-
     auto param = paramBuilder(cache->flatBufferBuilder);
-    auto metaParam = falcon::meta_fbs::CreateMetaParam(cache->flatBufferBuilder, type, param.Union());
+    auto metaParam = falcon::meta_fbs::CreateMetaParam(cache->flatBufferBuilder, flatBufferType, param.Union());
     cache->flatBufferBuilder.Finish(metaParam);
 
     char *p = SerializedDataApplyForSegment(&cache->serializedDataBuffer, cache->flatBufferBuilder.GetSize());
@@ -83,12 +43,6 @@ FalconErrorCode Connection::ProcessRequest(falcon::meta_proto::MetaServiceType p
 
     // 2. Construct request
     falcon::meta_proto::MetaRequest request;
-    request.add_type(proto_type);
-    if (proto_type == falcon::meta_proto::MKDIR || proto_type == falcon::meta_proto::CREATE ||
-        proto_type == falcon::meta_proto::STAT || proto_type == falcon::meta_proto::OPEN ||
-        proto_type == falcon::meta_proto::CLOSE || proto_type == falcon::meta_proto::UNLINK) {
-        request.set_allow_batch_with_others(ALLOW_BATCH_WITH_OTHERS);
-    }
     brpc::Controller cntl;
     cntl.set_timeout_ms(10000);
     cntl.request_attachment().append_user_data(cache->serializedDataBuffer.buffer,
@@ -177,7 +131,7 @@ FalconErrorCode Connection::PlainCommand(const char *command, PlainCommandResult
         return SUCCESS;
     };
 
-    return ProcessRequest(falcon::meta_proto::PLAIN_COMMAND, paramBuilder, responseHandler, cache, &result);
+    return ProcessRequest(falcon::meta_fbs::AnyMetaParam_PlainCommandParam, paramBuilder, responseHandler, cache, &result);
 }
 
 FalconErrorCode Connection::Mkdir(const char *path, ConnectionCache *cache)
@@ -191,7 +145,7 @@ FalconErrorCode Connection::Mkdir(const char *path, ConnectionCache *cache)
                                                                    : PROGRAM_ERROR;
     };
 
-    return ProcessRequest(falcon::meta_proto::MKDIR, paramBuilder, responseHandler, cache);
+    return ProcessRequest(falcon::meta_fbs::AnyMetaParam_MkdirParam, paramBuilder, responseHandler, cache);
 }
 
 FalconErrorCode
@@ -229,7 +183,7 @@ Connection::Create(const char *path, uint64_t &inodeId, int32_t &nodeId, struct 
         return (FalconErrorCode)metaResponse->error_code();
     };
 
-    return ProcessRequest(falcon::meta_proto::CREATE, paramBuilder, responseHandler, cache);
+    return ProcessRequest(falcon::meta_fbs::AnyMetaParam_CreateParam, paramBuilder, responseHandler, cache);
 }
 
 FalconErrorCode Connection::Stat(const char *path, struct stat *stbuf, ConnectionCache *cache)
@@ -262,7 +216,7 @@ FalconErrorCode Connection::Stat(const char *path, struct stat *stbuf, Connectio
         return (FalconErrorCode)metaResponse->error_code();
     };
 
-    return ProcessRequest(falcon::meta_proto::STAT, paramBuilder, responseHandler, cache);
+    return ProcessRequest(falcon::meta_fbs::AnyMetaParam_StatParam, paramBuilder, responseHandler, cache);
 }
 
 FalconErrorCode Connection::Open(const char *path,
@@ -306,7 +260,7 @@ FalconErrorCode Connection::Open(const char *path,
         return (FalconErrorCode)metaResponse->error_code();
     };
 
-    return ProcessRequest(falcon::meta_proto::OPEN, paramBuilder, responseHandler, cache);
+    return ProcessRequest(falcon::meta_fbs::AnyMetaParam_OpenParam, paramBuilder, responseHandler, cache);
 }
 
 FalconErrorCode
@@ -322,7 +276,7 @@ Connection::Close(const char *path, int64_t size, uint64_t mtime, int32_t nodeId
                    : PROGRAM_ERROR;
     };
 
-    return ProcessRequest(falcon::meta_proto::CLOSE, paramBuilder, responseHandler, cache);
+    return ProcessRequest(falcon::meta_fbs::AnyMetaParam_CloseParam, paramBuilder, responseHandler, cache);
 }
 
 FalconErrorCode
@@ -345,7 +299,7 @@ Connection::Unlink(const char *path, uint64_t &inodeId, int64_t &size, int32_t &
         return static_cast<FalconErrorCode>(metaResponse->error_code());
     };
 
-    return ProcessRequest(falcon::meta_proto::UNLINK, paramBuilder, responseHandler, cache);
+    return ProcessRequest(falcon::meta_fbs::AnyMetaParam_UnlinkParam, paramBuilder, responseHandler, cache);
 }
 
 FalconErrorCode Connection::ReadDir(const char *path,
@@ -367,7 +321,7 @@ FalconErrorCode Connection::ReadDir(const char *path,
         return SUCCESS;
     };
 
-    return ProcessRequest(falcon::meta_proto::READDIR, paramBuilder, responseHandler, cache, &readDirResponse);
+    return ProcessRequest(falcon::meta_fbs::AnyMetaParam_ReadDirParam, paramBuilder, responseHandler, cache, &readDirResponse);
 }
 
 FalconErrorCode Connection::OpenDir(const char *path, uint64_t &inodeId, ConnectionCache *cache)
@@ -385,7 +339,7 @@ FalconErrorCode Connection::OpenDir(const char *path, uint64_t &inodeId, Connect
         return SUCCESS;
     };
 
-    return ProcessRequest(falcon::meta_proto::OPENDIR, paramBuilder, responseHandler, cache);
+    return ProcessRequest(falcon::meta_fbs::AnyMetaParam_OpendirParam, paramBuilder, responseHandler, cache);
 }
 
 FalconErrorCode Connection::Rmdir(const char *path, ConnectionCache *cache)
@@ -400,7 +354,7 @@ FalconErrorCode Connection::Rmdir(const char *path, ConnectionCache *cache)
                    : PROGRAM_ERROR;
     };
 
-    return ProcessRequest(falcon::meta_proto::RMDIR, paramBuilder, responseHandler, cache);
+    return ProcessRequest(falcon::meta_fbs::AnyMetaParam_RmdirParam, paramBuilder, responseHandler, cache);
 }
 
 FalconErrorCode Connection::Rename(const char *src, const char *dst, ConnectionCache *cache)
@@ -415,7 +369,7 @@ FalconErrorCode Connection::Rename(const char *src, const char *dst, ConnectionC
                    : PROGRAM_ERROR;
     };
 
-    return ProcessRequest(falcon::meta_proto::RENAME, paramBuilder, responseHandler, cache);
+    return ProcessRequest(falcon::meta_fbs::AnyMetaParam_RenameParam, paramBuilder, responseHandler, cache);
 }
 
 FalconErrorCode Connection::UtimeNs(const char *path, int64_t atime, int64_t mtime, ConnectionCache *cache)
@@ -430,7 +384,7 @@ FalconErrorCode Connection::UtimeNs(const char *path, int64_t atime, int64_t mti
                    : PROGRAM_ERROR;
     };
 
-    return ProcessRequest(falcon::meta_proto::UTIMENS, paramBuilder, responseHandler, cache);
+    return ProcessRequest(falcon::meta_fbs::AnyMetaParam_UtimeNsParam, paramBuilder, responseHandler, cache);
 }
 
 FalconErrorCode Connection::Chown(const char *path, uint32_t uid, uint32_t gid, ConnectionCache *cache)
@@ -446,7 +400,7 @@ FalconErrorCode Connection::Chown(const char *path, uint32_t uid, uint32_t gid, 
         return PROGRAM_ERROR;
     };
 
-    return ProcessRequest(falcon::meta_proto::CHOWN, paramBuilder, responseHandler, cache);
+    return ProcessRequest(falcon::meta_fbs::AnyMetaParam_ChownParam, paramBuilder, responseHandler, cache);
 }
 
 FalconErrorCode Connection::Chmod(const char *path, uint32_t mode, ConnectionCache *cache)
@@ -462,5 +416,5 @@ FalconErrorCode Connection::Chmod(const char *path, uint32_t mode, ConnectionCac
         return PROGRAM_ERROR;
     };
 
-    return ProcessRequest(falcon::meta_proto::CHMOD, paramBuilder, responseHandler, cache);
+    return ProcessRequest(falcon::meta_fbs::AnyMetaParam_ChmodParam, paramBuilder, responseHandler, cache);
 }

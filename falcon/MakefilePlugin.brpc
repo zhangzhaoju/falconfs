@@ -22,13 +22,14 @@ BRPC_LDFLAGS_DEPENDENCIES = -L../../../../falcon/third_party/glog/lib -lpthread 
 
 BRPC_PLUGIN_CPPFLAGS = -I./include -I./brpc_comm_adapter/proto  \
 			  -I$(REMOTE_CONNECTION_DEF_DIR) \
+			  -I./connection_pool/fbs \
 			  -I$(falcon_srcdir)/../../../../falcon/third_party/glog/include
 
 BRPC_PLUGIN_LINK_LIB = $(BPRC_LDFLAGS_BRPC) $(BRPC_LDFLAGS_PROTO) $(BRPC_LDFLAGS_DEPENDENCIES)
 
 BRPC_PLUGIN_LIB_NAME = libbrpcplugin.so
 
-CXXFLAGS=-Wall -Wextra -O2 -fPIC
+CXXFLAGS=-Wall -Wextra -g -O0 -fPIC
 
 all: ${BRPC_PLUGIN_LIB_NAME}
 
