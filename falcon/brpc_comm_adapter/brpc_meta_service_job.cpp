@@ -3,6 +3,8 @@
  */
 #include "brpc_comm_adapter/brpc_meta_service_job.h"
 
+#include <vector>
+
 #define FALCON_REMOTE_CONNECTION_DEF_SERIALIZED_DATA_IMPLEMENT
 #include "remote_connection_utils/serialized_data.h"
 
@@ -64,17 +66,18 @@ FalconMetaServiceType BrpcMetaServiceJob::GetFalconMetaServiceType(int index)
     }
 
     size_t dataSize = m_cntl->request_attachment().size();
-    uint8_t *buffer = (uint8_t *)m_cntl->request_attachment().fetch1();
+    std::vector<uint8_t> buffer(dataSize);
+    m_cntl->request_attachment().copy_to(buffer.data(), dataSize);
 
     // Properly initialize SerializedData object
     SerializedData serializedData;
-    SerializedDataInit(&serializedData, (char *)buffer, dataSize, dataSize, nullptr);
+    SerializedDataInit(&serializedData, (char *)buffer.data(), dataSize, dataSize, nullptr);
 
     sd_size_t size = SerializedDataNextSeveralItemSize(&serializedData, 0, 1);
     if (size == (sd_size_t)-1)
         throw std::runtime_error("serialized param is corrupt.");
 
-    uint8_t *itemBuffer = (uint8_t *)buffer + SERIALIZED_DATA_ALIGNMENT;
+    uint8_t *itemBuffer = buffer.data() + SERIALIZED_DATA_ALIGNMENT;
     size_t itemSize = size - SERIALIZED_DATA_ALIGNMENT;
     flatbuffers::Verifier verifier(itemBuffer, itemSize);
     if (!verifier.VerifyBuffer<falcon::meta_fbs::MetaParam>(NULL))
